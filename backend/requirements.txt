@@ -3,3 +3,7 @@ uvicorn[standard]
 sqlalchemy
 psycopg[binary]
 alembic
+email-validator
+pwdlib[argon2]
+PyJWT
+python-multipart

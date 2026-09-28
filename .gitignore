@@ -1,14 +1,8 @@
-# =========================================================
-# ENVIRONMENT & SECRETS
-# =========================================================
+
 
 .env
 .env.*
 !.env.example
-
-# =========================================================
-# PYTHON
-# =========================================================
 
 __pycache__/
 *.py[cod]
@@ -41,27 +35,16 @@ htmlcov/
 .pyre/
 .ruff_cache/
 
-# =========================================================
-# FASTAPI / APPLICATION
-# =========================================================
+
 
 *.log
 logs/
 
-# =========================================================
-# ALEMBIC
-# =========================================================
 
-# NON ignorare alembic/versions/
-# Le migration devono essere versionate con Git.
-
-# Eventuali file temporanei
 alembic/__pycache__/
 alembic/versions/__pycache__/
 
-# =========================================================
-# NODE / REACT
-# =========================================================
+
 
 node_modules/
 npm-debug.log*
@@ -86,7 +69,7 @@ frontend/.env.*
 # DOCKER
 # =========================================================
 
-# Docker override files locali
+
 docker-compose.override.yml
 
 # Docker logs
@@ -106,15 +89,12 @@ docker/*.log
 *.sqlite
 *.sqlite3
 
-# =========================================================
-# IDE / EDITORS
-# =========================================================
+
 
 # VS Code
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-
 
 
 # Visual Studio
@@ -143,9 +123,6 @@ Desktop.ini
 *.temp
 *.swp
 *.swo
-
-
-
 
 
 # Dataset locali

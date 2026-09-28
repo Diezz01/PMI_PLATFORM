@@ -22,3 +22,9 @@ class User(Base):
         String(255),
         nullable=False,
     )
+
+    role: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="USER",
+    )

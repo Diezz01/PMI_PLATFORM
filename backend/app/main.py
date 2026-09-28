@@ -1,9 +1,8 @@
-from fastapi import FastAPI, Depends
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from fastapi import FastAPI
 
-from app.database import get_db
-from app.models.user import User
+from app.routers import users
+from app.routers import auth
+from app.routers import admin
 
 
 app = FastAPI(
@@ -13,18 +12,14 @@ app = FastAPI(
 )
 
 
+app.include_router(users.router)
+app.include_router(auth.router)
+app.include_router(admin.router)
+
+
 @app.get("/")
 def root():
     return {
         "message": "PMI Platform API",
         "status": "running",
     }
-
-
-@app.get("/users")
-def get_users(db: Session = Depends(get_db)):
-    users = db.scalars(
-        select(User)
-    ).all()
-
-    return users
