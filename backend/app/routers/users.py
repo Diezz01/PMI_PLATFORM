@@ -5,15 +5,16 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserResponse
-from app.configs.dependencies import get_current_user
+from app.configs.dependencies import get_current_user, require_role
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"],
+    dependencies=[Depends(get_current_user)]
 )
 
 
-@router.get("/", response_model=list[UserResponse])
+@router.get("/", response_model=list[UserResponse],  dependencies=[Depends(require_role("SUPER_ADMIN"))])
 def get_users(db: Session = Depends(get_db)):
     users = db.scalars(
         select(User)

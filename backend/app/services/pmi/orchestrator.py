@@ -7,8 +7,8 @@ class PMIOrchestrator:
 
     def calculate(self, input_data: dict[str, Any]) -> dict[str,Any]:
 
+        #results = {}
         results = []
-
         for method in registry.get_all_calculators():
             required_parmas = (method.required_parameters)
 
