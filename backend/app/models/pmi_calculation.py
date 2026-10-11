@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, JSON, func
+from sqlalchemy import DateTime, Float, ForeignKey, JSON, func,String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -13,7 +13,13 @@ class PMICalculation(Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
+    session_id: Mapped[str | None] = mapped_column(String(64),unique=True,nullable=True)
+
     input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    #contains the selected methods used to calculate the median
+    #it is possible that a user wants to calculate the median by choosing the prefered available results instead of the total amount
+    median_selected_methods: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
 
     median_pmi: Mapped[float] = mapped_column(Float, nullable=False)
 

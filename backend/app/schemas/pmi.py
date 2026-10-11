@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 #those are contracts that allow the LLM to execute the function requeste dby the user in Natural langauge
 # The operation could be:
@@ -9,33 +9,75 @@ from pydantic import BaseModel, Field
 #- request to consider only specific results
 #There are also included the contract for the response related to the request
 
+#UPDATE: 
+#each calculated prediction is associated to a user session
+
 class PMICalculateRequest(BaseModel):
     input_data: dict[str, Any]
+
 
 class PMIResultResponse(BaseModel):
     method_name: str
     pmi_value: float
-    input_params: dict[str,Any]
+    input_params: dict[str, Any]
     method_version: str
 
-#keep track of the avilable response, in this way the user can select which method store and use for the median
-class PMIAvailbaleResultsResponse(BaseModel):
+
+class PMICalculateResponse(BaseModel):
+    session_id: str
+    status: Literal["calculated"]
+    expires_at: datetime
     results: list[PMIResultResponse]
 
-#Through the LLM the user select the method and they are incapsulated in this request for the backend
+
+class PMISessionSummary(BaseModel):
+    session_id: str
+    status: Literal["calculated", "median_ready"]
+    created_at: datetime
+    expires_at: datetime
+    available_methods: list[str]
+    median_pmi: float | None = None
+
+
+class PMISessionsResponse(BaseModel):
+    sessions: list[PMISessionSummary]
+
+
 class PMIMedianRequest(BaseModel):
-    selected_methods: list[str] = Field(min_lenght = 1)
+    selected_methods: list[str] = Field(min_length=1)
+
+    @field_validator("selected_methods")
+    @classmethod
+    def methods_must_be_unique(cls, methods: list[str]) -> list[str]:
+        if len(methods) != len(set(methods)):
+            raise ValueError("Each method can be selected only once")
+        return methods
+
 
 class PMIMedianResponse(BaseModel):
+    session_id: str
+    status: Literal["median_ready"]
+    selected_methods: list[str]
     selected_results: list[PMIResultResponse]
     median_pmi: float
+    expires_at: datetime
+
 
 class PMISaveRequest(BaseModel):
-    selected_methods: list[str] 
-    #selected_methods: list[str] = Field(min_lenght = 1)
+    selected_methods: list[str] = Field(min_length=1)
+
+    @field_validator("selected_methods")
+    @classmethod
+    def methods_must_be_unique(cls, methods: list[str]) -> list[str]:
+        if len(methods) != len(set(methods)):
+            raise ValueError("Each method can be selected only once")
+        return methods
+
 
 class PMISaveResponse(BaseModel):
-    calculation_id: int
-    saved_result: list[PMIResultResponse]
+    calculation_id: int #identifier of a single computation of pmi
+    session_id: str #identifier of session of computations
+    saved_results: list[PMIResultResponse]
+    median_selected_methods: list[str]
     median_pmi: float
     created_at: datetime
