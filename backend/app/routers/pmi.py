@@ -44,6 +44,7 @@ router = APIRouter(
 )
 
 pmi_service = PMIService()
+logger = logging.getLogger(__name__)
 
 def _redis_unavailable() -> HTTPException:
     return HTTPException(
@@ -132,6 +133,7 @@ def list_pmi_sessions(
             available_methods=[
                 result["method_name"] for result in session["results"]
             ],
+            median_pmi=_format_pmi_hhmm(session.get("median_pmi")),
         )
         for session in sessions
     ]
@@ -222,9 +224,11 @@ def calculate_session_median(
         session_id=updated_session["session_id"],
         status=updated_session["status"],
         selected_methods=updated_session["selected_median_methods"],
+        median_pmi=_format_pmi_hhmm(updated_session["median_pmi"]),
         selected_results=[
             PMIResultResponse(
                 method_name=result["method_name"],
+                pmi_value=_format_pmi_hhmm(result["pmi_value"]),
                 input_params=result["input_params"],
                 method_version=result["method_version"],
             )
@@ -282,12 +286,14 @@ def _build_save_response(
         saved_results=[
             PMIResultResponse(
                 method_name=result.method_name,
+                pmi_value=_format_pmi_hhmm(result.pmi_value),
                 input_params=result.parameters,
                 method_version=result.method_version,
             )
             for result in calculation.results
         ],
         median_selected_methods=calculation.median_selected_methods,
+        median_pmi=_format_pmi_hhmm(calculation.median_pmi),
         created_at=calculation.created_at,
     )
 

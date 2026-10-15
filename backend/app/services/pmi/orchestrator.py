@@ -5,7 +5,7 @@ from app.services.pmi.registry import registry
 
 class PMIOrchestrator:
 
-    def calculate(self, input_data: dict[str, Any]) -> dict[str,Any]:
+    def calculate(self, input_data: dict[str, Any]) -> list[dict[str, Any]]:
 
         #results = {}
         results = []
@@ -31,8 +31,8 @@ class PMIOrchestrator:
 
     def calculate_median(self, results: list[dict[str,Any]]) -> float:
         if not results:
-            raise "No availbale results! At least one PMI is required"
+            raise ValueError("At least one PMI result is required")
 
         pmi_values = [res["pmi_value"] for res in results]
 
-        return median(pmi_values) 
+        return median(pmi_values)

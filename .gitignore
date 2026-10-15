@@ -1,4 +1,7 @@
 
+*/tests
+README.md
+backend/requirements-dev.txt
 
 .env
 .env.*
@@ -132,6 +135,7 @@ data/processed/
 
 tmp/
 temp/
+docs/
 
 uploads/
 

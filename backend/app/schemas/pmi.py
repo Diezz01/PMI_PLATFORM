@@ -3,6 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.henssge import HenssgeInput
+
 #those are contracts that allow the LLM to execute the function requeste dby the user in Natural langauge
 # The operation could be:
 #- request to calcultate PMI
@@ -12,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 #UPDATE: 
 #each calculated prediction is associated to a user session
 class PMICalculateRequest(BaseModel):
-    input_data: dict[str, Any]
+    input_data: HenssgeInput
 
 
 class PMIResultResponse(BaseModel):
