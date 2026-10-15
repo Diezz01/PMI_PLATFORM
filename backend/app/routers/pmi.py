@@ -1,8 +1,8 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from redis.exceptions import RedisError
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -22,7 +22,9 @@ from app.schemas.pmi import (
     PMISessionSummary,
     PMIResultResponse,
     PMISaveRequest,
-    PMISaveResponse
+    PMISaveResponse,
+    PMIHistoryItem,
+    PMIHistoryResponse
 )
 
 from app.services.pmi.pmi_service import PMIService
@@ -49,6 +51,15 @@ def _redis_unavailable() -> HTTPException:
         detail="PMI temporary session storage is unavailable",
     )
 
+def _format_pmi_hhmm(pmi_hours: float | None) -> str | None:
+    if pmi_hours is None:
+        return None
+
+    sign = "-" if pmi_hours < 0 else ""
+    total_minutes = int(abs(pmi_hours) * 60 + 0.5)
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{sign}{hours:02d}:{minutes:02d}"
+
 
 @router.post(
     "/calculate",
@@ -60,8 +71,9 @@ def calculate_pmi(
     current_user: User = Depends(get_current_user),
     session_store: PMISessionStore = Depends(get_pmi_session_store),
 ) -> PMICalculateResponse:
+    input_data = request.input_data.model_dump()
     try:
-        results = pmi_service.calculate_all_methods(request.input_data)
+        results = pmi_service.calculate_all_methods(input_data)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -71,7 +83,7 @@ def calculate_pmi(
     try:
         session = session_store.create_session(
             user_id=current_user.id,
-            input_data=request.input_data,
+            input_data=input_data,
             results=results,
         )
     except PMISessionLimitReached as exc:
@@ -86,7 +98,15 @@ def calculate_pmi(
         session_id=session["session_id"],
         status=session["status"],
         expires_at=session["expires_at"],
-        results=session["results"],
+        results=[
+            PMIResultResponse(
+                method_name=result["method_name"],
+                pmi_value=_format_pmi_hhmm(result["pmi_value"]),
+                input_params=result["input_params"],
+                method_version=result["method_version"],
+            )
+            for result in session["results"]
+        ],
     )
 
 
@@ -112,7 +132,6 @@ def list_pmi_sessions(
             available_methods=[
                 result["method_name"] for result in session["results"]
             ],
-            median_pmi=session["median_pmi"],
         )
         for session in sessions
     ]
@@ -203,8 +222,14 @@ def calculate_session_median(
         session_id=updated_session["session_id"],
         status=updated_session["status"],
         selected_methods=updated_session["selected_median_methods"],
-        selected_results=selected_results,
-        median_pmi=updated_session["median_pmi"],
+        selected_results=[
+            PMIResultResponse(
+                method_name=result["method_name"],
+                input_params=result["input_params"],
+                method_version=result["method_version"],
+            )
+            for result in selected_results
+        ],
         expires_at=updated_session["expires_at"],
     )
 
@@ -257,14 +282,12 @@ def _build_save_response(
         saved_results=[
             PMIResultResponse(
                 method_name=result.method_name,
-                pmi_value=result.pmi_value,
                 input_params=result.parameters,
                 method_version=result.method_version,
             )
             for result in calculation.results
         ],
         median_selected_methods=calculation.median_selected_methods,
-        median_pmi=calculation.median_pmi,
         created_at=calculation.created_at,
     )
 
@@ -381,3 +404,61 @@ def save_pmi_session(
         )
 
     return _build_save_response(calculation, session_id=session_id)
+
+@router.get(
+    "/history",
+    response_model=PMIHistoryResponse,
+)
+def get_pmi_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PMIHistoryResponse:
+    user_filter = PMICalculation.user_id == current_user.id
+
+    total = db.scalar(
+        select(func.count())
+        .select_from(PMICalculation)
+        .where(user_filter)
+    ) or 0
+
+    calculations = db.scalars(
+        select(PMICalculation)
+        .options(selectinload(PMICalculation.results))
+        .where(user_filter)
+        .order_by(
+            PMICalculation.created_at.desc(),
+            PMICalculation.id.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    items = [
+        PMIHistoryItem(
+            calculation_id=calculation.id,
+            input_data=calculation.input_data,
+            median_selected_methods=calculation.median_selected_methods,
+            median_pmi=_format_pmi_hhmm(calculation.median_pmi),
+            saved_results=[
+                PMIResultResponse(
+                    method_name=result.method_name,
+                    pmi_value=_format_pmi_hhmm(result.pmi_value),
+                    input_params=result.parameters,
+                    method_version=result.method_version,
+                )
+                for result in calculation.results
+            ],
+            created_at=calculation.created_at,
+        )
+        for calculation in calculations
+    ]
+
+    return PMIHistoryResponse(
+        calculations=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
