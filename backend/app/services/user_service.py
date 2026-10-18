@@ -10,7 +10,7 @@ from app.configs.security import hash_pwd_tool
 def create_user (db : Session, user_data: UserCreate) -> User:
     user = User(email = user_data.email, 
                 password_hash = hash_pwd_tool(user_data.password),
-                #role = user_data.role
+                # Public registration always creates an ordinary user.
                 role = "USER")
     db.add(user)
     db.commit()
