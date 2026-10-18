@@ -5,6 +5,22 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.henssge import HenssgeInput
 
+
+class PMICorrectiveFactorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    cf_value: float
+    dry_clothing_or_covering: str | None
+    in_air: str | None
+    wet_through_clothing_or_covering_or_wet_body_surface: str | None
+    water: str | None
+
+
+class PMICorrectiveFactorsResponse(BaseModel):
+    correction_factors: list[PMICorrectiveFactorResponse]
+
+
 #those are contracts that allow the LLM to execute the function requeste dby the user in Natural langauge
 # The operation could be:
 #- request to calcultate PMI

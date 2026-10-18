@@ -14,6 +14,8 @@ from app.models.user import User
 from app.models.pmi_calculation import PMICalculation, PMIResult
 
 from app.schemas.pmi import (
+    PMICorrectiveFactorResponse,
+    PMICorrectiveFactorsResponse,
     PMICalculateRequest,
     PMICalculateResponse,
     PMIMedianRequest,
@@ -27,7 +29,7 @@ from app.schemas.pmi import (
     PMIHistoryResponse
 )
 
-from app.services.pmi.pmi_service import PMIService
+from app.services.pmi.pmi_service import InvalidCorrectionFactor, PMIService
 
 from app.services.pmi.session_store import (
     PMISessionConflict,
@@ -62,6 +64,24 @@ def _format_pmi_hhmm(pmi_hours: float | None) -> str | None:
     return f"{sign}{hours:02d}:{minutes:02d}"
 
 
+@router.get(
+    "/correction-factors",
+    response_model=PMICorrectiveFactorsResponse,
+    summary="List correction factors and their descriptions",
+)
+def list_correction_factors(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PMICorrectiveFactorsResponse:
+    factors = pmi_service.list_correction_factors(db=db)
+    return PMICorrectiveFactorsResponse(
+        correction_factors=[
+            PMICorrectiveFactorResponse.model_validate(factor)
+            for factor in factors
+        ],
+    )
+
+
 @router.post(
     "/calculate",
     response_model=PMICalculateResponse,
@@ -71,10 +91,20 @@ def calculate_pmi(
     request: PMICalculateRequest,
     current_user: User = Depends(get_current_user),
     session_store: PMISessionStore = Depends(get_pmi_session_store),
+    db: Session = Depends(get_db),
 ) -> PMICalculateResponse:
     input_data = request.input_data.model_dump()
     try:
-        results = pmi_service.calculate_all_methods(input_data)
+        results = pmi_service.calculate_all_methods(input_data, db=db)
+    except InvalidCorrectionFactor as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=[{
+                "type": "value_error",
+                "loc": ["body", "input_data", "correction_factor"],
+                "msg": str(exc),
+            }],
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

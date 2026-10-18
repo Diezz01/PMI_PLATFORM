@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class HenssgeInput(BaseModel):
     """Input ranges follow PMI Calculator 1.1, pages 2-4.
 
-    A positive correction factor is structurally valid, but its membership in
-    the reference table and suitability for a case are not checked here.
+    Database membership of the correction factor is checked by PMIService.
+    Suitability for the conditions of a particular case is not checked here.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
@@ -23,7 +23,7 @@ class HenssgeInput(BaseModel):
     )
     correction_factor: float = Field(
         gt=0,
-        description="Dimensionless Henssge correction factor; must be explicitly supplied.",
+        description="Positive dimensionless factor; must exist in pmi_corrective_factors.cf_value.",
     )
 
     @model_validator(mode="after")
