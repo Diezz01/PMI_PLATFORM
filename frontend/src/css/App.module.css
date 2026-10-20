@@ -1,0 +1,98 @@
+.page {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f7fa;
+}
+
+.header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #dce3eb;
+}
+
+.headerContent {
+  width: min(100% - 2rem, 72rem);
+  margin-inline: auto;
+  padding-block: 1.25rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.unicamLogo {
+  display: block;
+  width: auto;
+  height: 3rem;
+  max-width: 10rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brandName {
+  margin: 0;
+  color: #173b5e;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.brandDescription {
+  margin: 0.25rem 0 0;
+  color: #526174;
+  font-size: 0.875rem;
+}
+
+.context {
+  padding-left: 0;
+}
+
+@media (max-width: 40rem) {
+  .headerContent {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .context {
+    padding-left: 3.875rem;
+  }
+}
+
+.footer {
+  margin-top: auto;
+  background-color: #1b3b5d;
+  border-top: 1px solid #dce3eb;
+}
+
+.footerContent {
+  width: min(100% - 2rem, 72rem);
+  margin-inline: auto;
+  padding-block: 1.25rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.footerBrand {
+  margin: 0;
+  color: #dce3eb;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.footerDescription {
+  margin: 0;
+  color: #dce3eb;
+  font-size: 0.875rem;
+}
