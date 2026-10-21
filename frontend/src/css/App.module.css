@@ -66,6 +66,14 @@
   }
 }
 
+.main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+}
+
 .footer {
   margin-top: auto;
   background-color: #1b3b5d;

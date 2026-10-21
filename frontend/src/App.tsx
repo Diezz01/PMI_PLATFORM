@@ -1,5 +1,14 @@
+//MODULES
+import LoginForm from './components/loginForm'
+
+//CSS
 import styles from './css/App.module.css'
+
+//ASSETS
 import logoUnicam from './assets/Logo_unicam-removebg-preview.png'
+
+
+
 
 function App() {
   return (
@@ -24,6 +33,9 @@ function App() {
           <span className={styles.context}>Forensic Medicine</span>
         </div>
       </header>
+      <main className={styles.main}>
+        <LoginForm />
+      </main>
       <footer className={styles.footer}>
         <div className={styles.footerContent}>
           <p className={styles.footerBrand}>UNICAM PMI Platform</p>
