@@ -23,6 +23,14 @@ class Settings:
         )
     )
 
+    #CHANGE IN PROD
+    FRONTEND_ORIGIN: str = os.getenv(
+    "FRONTEND_ORIGIN",
+    "http://localhost:5173",
+    )
+
+    AUTH_COOKIE_SECURE: bool = (os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true")
+    #----------------
     
     #---------------------------------
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")

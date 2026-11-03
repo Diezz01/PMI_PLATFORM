@@ -46,3 +46,7 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class AuthSessionResponse(BaseModel):
+    user: UserResponse
+    expires_at: int #expiration istant expressed in seconds

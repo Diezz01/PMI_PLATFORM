@@ -1,50 +1,111 @@
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from typing import Callable
+
 import jwt
 from jwt.exceptions import InvalidTokenError
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from typing import Callable
 
 from app.configs.config import settings
 from app.database import get_db
 from app.models.user import User
 
+
+AUTH_COOKIE_NAME = "pmi_access_token"
+
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/auth/login"
+    tokenUrl="/auth/login",
+    auto_error=False,
 )
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    credentials_exception = HTTPException(
+
+def authentication_error() -> HTTPException:
+    return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={
-            "WWW-Authenticate": "Bearer",
-        },
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
+
+def require_web_origin(request: Request) -> None:
+    if (
+        request.headers.get("origin") != settings.FRONTEND_ORIGIN
+        or request.headers.get("x-pmi-request") != "1"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Request origin is not allowed",
+        )
+
+
+def decode_credentials(token: str) -> tuple[int, int]:
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        user_id = payload.get("sub") #to obtain the subject that represent the user id encoded in the token 
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"require": ["sub", "exp"]},
+        )
 
-        if user_id is None:
-            raise credentials_exception
-        
-    except InvalidTokenError:
-        raise credentials_exception
+        subject = payload["sub"]
+        expires_at = payload["exp"]
 
-    user = db.get(User, int(user_id))
+        if not isinstance(subject, str):
+            raise ValueError("Invalid subject")
+
+        user_id = int(subject)
+
+        if user_id <= 0 or type(expires_at) is not int:
+            raise ValueError("Invalid token claims")
+
+    except (InvalidTokenError, ValueError, TypeError, OverflowError):
+        raise authentication_error() from None
+
+    return user_id, expires_at
+
+
+def get_current_auth(
+    request: Request,
+    bearer_token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> tuple[User, int]:
+    token = bearer_token
+
+    if token is None:
+        token = request.cookies.get(AUTH_COOKIE_NAME)
+
+        if token and request.method not in {"GET", "HEAD", "OPTIONS"}:
+            require_web_origin(request)
+
+    if not token:
+        raise authentication_error()
+
+    user_id, expires_at = decode_credentials(token)
+    user = db.get(User, user_id)
 
     if user is None:
-        raise credentials_exception
+        raise authentication_error()
 
+    return user, expires_at
+
+
+def get_current_user(
+    auth: tuple[User, int] = Depends(get_current_auth),
+) -> User:
+    user, _ = auth
     return user
 
 
-def require_role(required_role: str)-> Callable:
-    def role_check(current_user: User = Depends(get_current_user))->User:
-
+def require_role(required_role: str) -> Callable:
+    def role_check(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
         if current_user.role != required_role:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficent Permission")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permission",
+            )
 
         return current_user
+
     return role_check

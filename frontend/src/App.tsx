@@ -2,6 +2,7 @@
 import LoginForm from './components/loginForm'
 import Dashboard from './components/Dashboard'
 import RegisterForm from './components/RegistrationForm'
+import { useSession } from './hooks/useSession'
 
 //CSS
 import styles from './css/App.module.css'
@@ -14,8 +15,9 @@ import { useState } from 'react'
 
 
 
+
 function App() {
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+ const {session,setSession,checkingSession,sessionError} = useSession()
   const [authView, setAuthView] = useState<'login' | 'register'>('login')
   const [registrationMessage, setRegistrationMessage] = useState('')
   return (
@@ -41,7 +43,23 @@ function App() {
         </div>
       </header>
       <main className={styles.main}>
-        {accessToken ? (
+        {checkingSession ? (
+          <p role="status">Checking your session...</p>
+        ) : sessionError ? (
+          <section className={authStyles.card}>
+            <p className={authStyles.error} role="alert">
+              {sessionError}
+            </p>
+
+            <button
+              type="button"
+              className={authStyles.linkButton}
+              onClick={() => window.location.reload()}
+            >
+              Try again
+            </button>
+          </section>
+        ) : session ? (
           <Dashboard />
         ) : (
           <div className={styles.authPanel}>
@@ -66,7 +84,7 @@ function App() {
                   </p>
                 )}
 
-                <LoginForm onLoginSuccess={setAccessToken} />
+                <LoginForm onLoginSuccess={setSession} />
 
                 <p className={authStyles.navigation}>
                   <button

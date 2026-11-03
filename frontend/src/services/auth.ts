@@ -1,25 +1,92 @@
-export async function login(email: string,password: string,): Promise<string> {
-  const body = new URLSearchParams({
-    //Need to use username field even if the login is made with email 
-    //because in the backend OAuth2PasswordRequestForm is used
-    username: email,
-    password,
-  })
+export type AuthSession = {
+  user: {
+    id: number
+    email: string
+  }
+  expires_at: number
+}
 
+async function readSession(response: Response): Promise<AuthSession> {
+  const data: unknown = await response.json().catch(() => null)
+
+  if (
+    typeof data !== 'object' ||
+    data === null ||
+    !('user' in data) ||
+    typeof data.user !== 'object' ||
+    data.user === null ||
+    !('id' in data.user) ||
+    typeof data.user.id !== 'number' ||
+    !Number.isInteger(data.user.id) ||
+    !('email' in data.user) ||
+    typeof data.user.email !== 'string' ||
+    !('expires_at' in data) ||
+    typeof data.expires_at !== 'number' ||
+    !Number.isSafeInteger(data.expires_at)
+  ) {
+    throw new Error('The server returned an unexpected response.')
+  }
+
+  return {
+    user: {
+      id: data.user.id,
+      email: data.user.email,
+    },
+    expires_at: data.expires_at,
+  }
+}
+
+export async function getSession(): Promise<AuthSession | null> {
   let response: Response
 
   try {
-    response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
+    response = await fetch('/api/auth/session', {
+      credentials: 'same-origin',
+      cache: 'no-store',
       signal: AbortSignal.timeout(15000),
     })
   } catch {
     throw new Error(
-      'Unable to reach the server. Please check your connection and try again.',
+      'Unable to check your session. Please check your connection.',
+    )
+  }
+
+  if (response.status === 401) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      'Unable to check your session. Please try again later.',
+    )
+  }
+
+  return readSession(response)
+}
+
+export async function login(
+  email: string,
+  password: string,
+): Promise<AuthSession> {
+  let response: Response
+
+  try {
+    response = await fetch('/api/auth/session', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-PMI-Request': '1',
+      },
+      body: new URLSearchParams({
+        username: email,
+        password,
+      }),
+      signal: AbortSignal.timeout(15000),
+    })
+  } catch {
+    throw new Error(
+      'Unable to reach the server. Please check your connection.',
     )
   }
 
@@ -27,37 +94,19 @@ export async function login(email: string,password: string,): Promise<string> {
     throw new Error('Incorrect email or password.')
   }
 
+  if (response.status === 403) {
+    throw new Error('Sign-in is not allowed from this application address.')
+  }
+
   if (response.status === 422) {
     throw new Error('Please check your email and password.')
   }
 
-  if (response.status >= 500) {
-    throw new Error(
-      'The service is temporarily unavailable. Please try again later.',
-    )
-  }
-
   if (!response.ok) {
-    throw new Error('Unable to sign in. Please try again.')
+    throw new Error('Unable to sign in. Please try again later.')
   }
 
-  const data: unknown = await response.json().catch(() => null)
-
-  if (
-    typeof data !== 'object' ||
-    data === null ||
-    !('access_token' in data) ||
-    typeof data.access_token !== 'string' ||
-    !data.access_token.trim() ||
-    !('token_type' in data) ||
-    data.token_type !== 'bearer'
-  ) {
-    throw new Error(
-      'The server returned an unexpected response. Please try again.',
-    )
-  }
-
-  return data.access_token
+  return readSession(response)
 }
 
 export async function register(email: string,password: string): Promise<void> {

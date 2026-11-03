@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import styles from './../css/loginForm.module.css'
 import { login } from './../services/auth'
 import { validateEmail } from '../utils/authValidation'
-
+import type { AuthSession } from '../services/auth'
 
 function validatePassword(value: string): string {
   if (!value) {
@@ -18,7 +18,7 @@ function validatePassword(value: string): string {
 }
 
 type LoginFormProps = {
-  onLoginSuccess: (accessToken: string) => void
+  onLoginSuccess: (session: AuthSession) => void
 }
 
 function LoginForm({ onLoginSuccess }: LoginFormProps) {
@@ -66,12 +66,11 @@ function LoginForm({ onLoginSuccess }: LoginFormProps) {
     submittingRef.current = true
 
     try {
-      const accessToken = await login(
-        emailInput.value,
-        passwordInput.value,
-      )
+      const session = await login(
+      emailInput.value,
+      passwordInput.value)
 
-      onLoginSuccess(accessToken)
+    onLoginSuccess(session)
     } catch (error) {
       setStatus(
         error instanceof Error
