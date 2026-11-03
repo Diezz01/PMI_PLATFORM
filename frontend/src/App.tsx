@@ -1,16 +1,23 @@
 //MODULES
 import LoginForm from './components/loginForm'
+import Dashboard from './components/Dashboard'
+import RegisterForm from './components/RegistrationForm'
 
 //CSS
 import styles from './css/App.module.css'
+import authStyles from './css/loginForm.module.css'
 
 //ASSETS
 import logoUnicam from './assets/Logo_unicam-removebg-preview.png'
 
+import { useState } from 'react'
 
 
 
 function App() {
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [authView, setAuthView] = useState<'login' | 'register'>('login')
+  const [registrationMessage, setRegistrationMessage] = useState('')
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -34,7 +41,49 @@ function App() {
         </div>
       </header>
       <main className={styles.main}>
-        <LoginForm />
+        {accessToken ? (
+          <Dashboard />
+        ) : (
+          <div className={styles.authPanel}>
+            {authView === 'register' ? (
+              <RegisterForm
+                onRegistered={() => {
+                  setRegistrationMessage(
+                    'Registration completed successfully. You can now sign in.',
+                  )
+                  setAuthView('login')
+                }}
+                onBackToLogin={() => {
+                  setRegistrationMessage('')
+                  setAuthView('login')
+                }}
+              />
+            ) : (
+              <>
+                {registrationMessage && (
+                  <p className={authStyles.success} role="status">
+                    {registrationMessage}
+                  </p>
+                )}
+
+                <LoginForm onLoginSuccess={setAccessToken} />
+
+                <p className={authStyles.navigation}>
+                  <button
+                    type="button"
+                    className={authStyles.linkButton}
+                    onClick={() => {
+                      setRegistrationMessage('')
+                      setAuthView('register')
+                    }}
+                  >
+                    Don't have an account? Create one
+                  </button>
+                </p>
+              </>
+            )}
+          </div>
+        )}
       </main>
       <footer className={styles.footer}>
         <div className={styles.footerContent}>

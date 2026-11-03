@@ -114,3 +114,44 @@
   color: #526174;
   font-size: 0.875rem;
 }
+
+.linkButton {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: #173b5e;
+
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.linkButton:focus-visible {
+  outline: 3px solid #173b5e;
+  outline-offset: 2px;
+}
+
+.linkButton:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.navigation {
+  margin: 1rem 0 0;
+  text-align: center;
+}
+
+.success {
+  margin: 0 0 1rem;
+  padding: 1rem;
+
+  border: 1px solid #15803d;
+  border-radius: 0.5rem;
+  background-color: #f0fdf4;
+  color: #166534;
+
+  font-size: 0.875rem;
+}

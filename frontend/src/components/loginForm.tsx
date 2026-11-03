@@ -1,52 +1,9 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import styles from './../css/loginForm.module.css'
+import { login } from './../services/auth'
+import { validateEmail } from '../utils/authValidation'
 
-function validateEmail(input: HTMLInputElement): string {
-  const value = input.value
-
-  if (!value.trim()) {
-    return 'Enter your email address.'
-  }
-
-  if (/\s/.test(value)) {
-    return 'Email addresses cannot contain spaces.'
-  }
-
-  const parts = value.split('@')
-
-  if (parts.length !== 2) {
-    return 'Enter an email address with one @ symbol.'
-  }
-
-  if (!parts[0]) {
-    return 'Enter the part before the @ symbol.'
-  }
-
-  if (!parts[1]) {
-    return 'Enter the domain after the @ symbol.'
-  }
-
-  const domain = parts[1]
-
-  if (domain.endsWith('.')) {
-    return 'The email domain cannot end with a dot.'
-  }
-
-  if (!domain.includes('.')) {
-    return 'Enter a domain with a dot, such as example.com.'
-  }
-
-  if (domain.split('.').some((part) => !part)) {
-    return 'Enter text between each dot in the email domain.'
-  }
-
-  if (input.validity.typeMismatch) {
-    return 'Enter a valid email address, such as name@example.com.'
-  }
-
-  return ''
-}
 
 function validatePassword(value: string): string {
   if (!value) {
@@ -60,7 +17,11 @@ function validatePassword(value: string): string {
   return ''
 }
 
-function LoginForm() {
+type LoginFormProps = {
+  onLoginSuccess: (accessToken: string) => void
+}
+
+function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
 
@@ -71,8 +32,12 @@ function LoginForm() {
   const [passwordTouched, setPasswordTouched] = useState(false)
   const [status, setStatus] = useState('')
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const submittingRef = useRef(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (submittingRef.current) return
 
     const emailInput = emailRef.current
     const passwordInput = passwordRef.current
@@ -98,7 +63,24 @@ function LoginForm() {
       return
     }
 
-    setStatus('The fields are valid. Sign-in is not connected yet.')
+    submittingRef.current = true
+
+    try {
+      const accessToken = await login(
+        emailInput.value,
+        passwordInput.value,
+      )
+
+      onLoginSuccess(accessToken)
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : 'Unable to sign in. Please try again.',
+      )
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   return (
@@ -189,7 +171,7 @@ function LoginForm() {
           Sign in
         </button>
 
-        <p className={styles.status} role="status">
+        <p className={styles.error} role="alert">
           {status}
         </p>
       </form>

@@ -54,6 +54,8 @@
   padding-left: 0;
 }
 
+
+
 @media (max-width: 40rem) {
   .headerContent {
     flex-direction: column;
@@ -72,6 +74,11 @@
   align-items: center;
   justify-content: center;
   padding: 2.5rem 1rem;
+}
+
+.authPanel {
+  width: 100%;
+  max-width: 28rem;
 }
 
 .footer {
