@@ -5,7 +5,9 @@ from jwt.exceptions import InvalidTokenError
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+import re
 
+from app.models.revoked_token import RevokedToken
 from app.configs.config import settings
 from app.database import get_db
 from app.models.user import User
@@ -38,17 +40,18 @@ def require_web_origin(request: Request) -> None:
         )
 
 
-def decode_credentials(token: str) -> tuple[int, int]:
+def decode_credentials(token: str) -> tuple[int, int, str]:
     try:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"require": ["sub", "exp"]},
+            options={"require": ["sub", "exp", "jti"]},
         )
 
         subject = payload["sub"]
         expires_at = payload["exp"]
+        jti = payload["jti"]
 
         if not isinstance(subject, str):
             raise ValueError("Invalid subject")
@@ -58,10 +61,16 @@ def decode_credentials(token: str) -> tuple[int, int]:
         if user_id <= 0 or type(expires_at) is not int:
             raise ValueError("Invalid token claims")
 
+        if (
+            not isinstance(jti, str)
+            or re.fullmatch(r"[0-9a-f]{32}", jti) is None
+        ):
+            raise ValueError("Invalid token identifier")
+
     except (InvalidTokenError, ValueError, TypeError, OverflowError):
         raise authentication_error() from None
 
-    return user_id, expires_at
+    return user_id, expires_at, jti
 
 
 def get_current_auth(
@@ -80,7 +89,11 @@ def get_current_auth(
     if not token:
         raise authentication_error()
 
-    user_id, expires_at = decode_credentials(token)
+    user_id, expires_at, jti = decode_credentials(token)
+
+    if db.get(RevokedToken, jti) is not None:
+        raise authentication_error()
+
     user = db.get(User, user_id)
 
     if user is None:

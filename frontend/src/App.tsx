@@ -14,12 +14,28 @@ import logoUnicam from './assets/Logo_unicam-removebg-preview.png'
 import { useState } from 'react'
 
 
-
-
 function App() {
- const {session,setSession,checkingSession,sessionError} = useSession()
+  const {
+    session,
+    completeLogin,
+    checkingSession,
+    sessionError,
+    signOut,
+    isSigningOut,
+    signOutError,
+  } = useSession()
   const [authView, setAuthView] = useState<'login' | 'register'>('login')
   const [registrationMessage, setRegistrationMessage] = useState('')
+
+  async function handleSignOut() {
+    const signedOut = await signOut()
+
+    if (signedOut) {
+      setAuthView('login')
+      setRegistrationMessage('')
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -39,7 +55,26 @@ function App() {
             </div>
           </div>
 
-          <span className={styles.context}>Forensic Medicine</span>
+          <div className={styles.headerActions}>
+            <span className={styles.context}>Forensic Medicine</span>
+
+            {session && (
+              <button
+                type="button"
+                className={styles.signOutButton}
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+              >
+                {isSigningOut ? 'Signing out...' : 'Sign out'}
+              </button>
+            )}
+
+            {session && signOutError && (
+              <p className={styles.signOutError} role="alert">
+                {signOutError}
+              </p>
+            )}
+          </div>
         </div>
       </header>
       <main className={styles.main}>
@@ -84,7 +119,7 @@ function App() {
                   </p>
                 )}
 
-                <LoginForm onLoginSuccess={setSession} />
+                <LoginForm onLoginSuccess={completeLogin} />
 
                 <p className={authStyles.navigation}>
                   <button

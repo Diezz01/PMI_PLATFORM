@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
-import { getSession } from '../services/auth'
 import type { AuthSession } from '../services/auth'
+import { useEffect, useRef, useState } from 'react'
+import { getSession, logout as logoutRequest } from '../services/auth'
 
 export function useSession() {
   const [session, setSession] = useState<AuthSession | null>(null)
   const [checkingSession, setCheckingSession] = useState(true)
   const [sessionError, setSessionError] = useState('')
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState('')
+  const signingOutRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -79,10 +82,49 @@ export function useSession() {
     }
   }, [session])
 
-  return {
-    session,
-    setSession,
-    checkingSession,
-    sessionError,
+  function completeLogin(nextSession: AuthSession) {
+    setSession(nextSession)
+    setSessionError('')
+    setSignOutError('')
   }
+
+  async function signOut(): Promise<boolean> {
+    if (signingOutRef.current) return false
+
+    signingOutRef.current = true
+    setIsSigningOut(true)
+    setSignOutError('')
+
+    try {
+      await logoutRequest()
+
+      setSession(null)
+      setSessionError('')
+
+      return true
+    } catch (error) {
+      setSignOutError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to sign out. Please try again.',
+      )
+
+      return false
+    } finally {
+      signingOutRef.current = false
+      setIsSigningOut(false)
+    }
+  }
+
+
+  return {
+  session,
+  completeLogin,
+  checkingSession,
+  sessionError,
+  signOut,
+  isSigningOut,
+  signOutError,
 }
+}
+

@@ -148,3 +148,26 @@ export async function register(email: string,password: string): Promise<void> {
     throw new Error('Unable to create your account. Please try again.')
   }
 }
+
+export async function logout(): Promise<void> {
+  let response: Response
+
+  try {
+    response = await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-PMI-Request': '1',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+  } catch {
+    throw new Error(
+      'Unable to confirm sign-out. Please check your connection and try again.',
+    )
+  }
+
+  if (!response.ok) {
+    throw new Error('Unable to sign out. Please try again.')
+  }
+}
