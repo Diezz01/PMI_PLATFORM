@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-
+from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 from redis.exceptions import RedisError
 
@@ -24,6 +24,14 @@ from app.services.pmi.session_store import (
     PMISessionConflict,
     PMISessionLimitReached,
     PMISessionNotFound,
+)
+from app.database import get_db
+from app.routers.pmi import calculate_and_store_pmi
+from app.schemas.pmi import PMICalculateRequest, PMICalculateResponse
+from app.schemas.pmi_draft import PMIDraftCalculateRequest
+from app.services.pmi.session_store import (
+    PMISessionStore,
+    get_pmi_session_store,
 )
 
 
@@ -203,3 +211,44 @@ def delete_draft(
             user_id=current_user.id,
             session_id=draft_id,
         )
+
+@router.post(
+    "/{draft_id}/calculate",
+    response_model=PMICalculateResponse,
+    status_code=201,
+)
+def calculate_from_draft(
+    draft_id: str,
+    request: PMIDraftCalculateRequest,
+    current_user: User = Depends(get_current_user),
+    store: PMIDraftStore = Depends(get_pmi_draft_store),
+    session_store: PMISessionStore = Depends(get_pmi_session_store),
+    db: Session = Depends(get_db),
+) -> PMICalculateResponse:
+    with _handle_errors():
+        record = store.get_session(
+            user_id=current_user.id,
+            session_id=draft_id,
+        )
+
+        state = _read_state(record)
+
+        if state.version != request.expected_version:
+            raise PMIDraftConflict(
+                "La bozza è cambiata. Ricaricala prima del calcolo."
+            )
+
+        # Rifiuta le bozze non confermate e restituisce
+        # una copia validata dei dati da calcolare.
+        calculation_input = draft_service.get_calculation_input(state)
+
+    return calculate_and_store_pmi(
+        request=PMICalculateRequest(input_data=calculation_input),
+        current_user=current_user,
+        session_store=session_store,
+        db=db,
+        source_draft={
+            "draft_id": draft_id,
+            "version": state.version,
+        },
+    )

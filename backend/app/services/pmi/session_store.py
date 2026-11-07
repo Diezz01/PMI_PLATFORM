@@ -145,6 +145,7 @@ class PMISessionStore:
     input_data: dict[str, Any],
     results: list[dict[str, Any]],
     evaluated_results: list[dict] | None = None,
+    source_draft: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
         now = int(time.time())
         absolute_expiry = now + settings.PMI_SESSION_MAX_TTL_SECONDS
@@ -156,6 +157,7 @@ class PMISessionStore:
         session_id = secrets.token_urlsafe(32)
         session = {
             "session_id": session_id,
+            "source_draft": source_draft,
             "user_id": user_id,
             "input_data": input_data,
             "results": results,

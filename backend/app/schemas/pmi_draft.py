@@ -38,3 +38,8 @@ class PMIDraftSummary(BaseModel):
 class PMIDraftResponse(PMIDraftSummary):
     draft_id: str
     expires_at: datetime
+
+class PMIDraftCalculateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)

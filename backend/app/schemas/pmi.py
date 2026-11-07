@@ -45,6 +45,7 @@ class PMIResultResponse(BaseModel):
 
 class PMICalculateResponse(BaseModel):
     session_id: str
+    source_draft: dict[str, Any] | None = None
     status: Literal["calculated"]
     expires_at: datetime
     results: list[PMIResultResponse]

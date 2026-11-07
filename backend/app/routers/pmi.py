@@ -153,16 +153,13 @@ def list_correction_factors(
     )
 
 
-@router.post(
-    "/calculate",
-    response_model=PMICalculateResponse,
-    status_code=status.HTTP_201_CREATED
-    )
-def calculate_pmi(
+def _calculate_and_store_pmi(
+    *,
     request: PMICalculateRequest,
-    current_user: User = Depends(get_current_user),
-    session_store: PMISessionStore = Depends(get_pmi_session_store),
-    db: Session = Depends(get_db),
+    current_user: User,
+    session_store: PMISessionStore,
+    db: Session,
+    source_draft: dict | None = None,
 ) -> PMICalculateResponse:
     input_data = request.input_data.model_dump(exclude_none=True)
     try:
@@ -207,7 +204,8 @@ def calculate_pmi(
             user_id=current_user.id,
             input_data=input_data,
             results=results,
-            evaluated_results=stored_evaluated_results
+            evaluated_results=stored_evaluated_results,
+            source_draft=source_draft
         )
     except PMISessionLimitReached as exc:
         raise HTTPException(
@@ -219,6 +217,7 @@ def calculate_pmi(
 
     return PMICalculateResponse(
         session_id=session["session_id"],
+        source_draft=session.get("source_draft"),
         status=session["status"],
         expires_at=session["expires_at"],
         version=session["version"],
@@ -234,6 +233,23 @@ def calculate_pmi(
         ],
     )
 
+@router.post(
+    "/calculate",
+    response_model=PMICalculateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def calculate_pmi(
+    request: PMICalculateRequest,
+    current_user: User = Depends(get_current_user),
+    session_store: PMISessionStore = Depends(get_pmi_session_store),
+    db: Session = Depends(get_db),
+) -> PMICalculateResponse:
+    return _calculate_and_store_pmi(
+        request=request,
+        current_user=current_user,
+        session_store=session_store,
+        db=db,
+    )
 
 @router.get(
     "/sessions",
@@ -264,7 +280,6 @@ def list_pmi_sessions(
     ]
 
     return PMISessionsResponse(sessions=summaries)
-
 
 @router.post(
     "/sessions/{session_id}/median",
@@ -321,7 +336,6 @@ def calculate_session_median(
         expires_at=updated_session["expires_at"],
         version=updated_session["version"],
     )
-
 
 @router.delete(
     "/sessions/{session_id}",
@@ -465,6 +479,7 @@ def save_pmi_session(
             "schema_version": 1,
             "session_version": session["version"],
             "saved_method_ids": list(request.selected_methods),
+            "source_draft": session.get("source_draft"),
             "evaluated_results": [
                 result
                 for result in stored_evaluated_results
