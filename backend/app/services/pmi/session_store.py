@@ -138,7 +138,14 @@ class PMISessionStore:
         return f"pmi:user:{user_id}:sessions"
 
     #set up the session for the user
-    def create_session(self,*,user_id: int,input_data: dict[str, Any],results: list[dict[str, Any]]) -> dict[str, Any]:
+    def create_session(
+    self,
+    *,
+    user_id: int,
+    input_data: dict[str, Any],
+    results: list[dict[str, Any]],
+    evaluated_results: list[dict] | None = None,
+) -> dict[str, Any]:
         now = int(time.time())
         absolute_expiry = now + settings.PMI_SESSION_MAX_TTL_SECONDS
         expires_at = min(
@@ -146,7 +153,6 @@ class PMISessionStore:
             absolute_expiry,
         )
         ttl = expires_at - now
-
         session_id = secrets.token_urlsafe(32)
         session = {
             "session_id": session_id,
@@ -161,6 +167,9 @@ class PMISessionStore:
             "created_at": _utc_iso(now),
             "expires_at": _utc_iso(expires_at),
             "absolute_expires_epoch": absolute_expiry,
+            "evaluated_results": (
+                evaluated_results if evaluated_results is not None else []
+            ),
         }
 
         created = self._create_script(
@@ -178,6 +187,8 @@ class PMISessionStore:
                 settings.PMI_SESSION_MAX_TTL_SECONDS,
             ],
         )
+
+        
 
         if int(created) != 1:
             raise PMISessionLimitReached

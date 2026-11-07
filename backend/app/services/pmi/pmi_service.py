@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.pmi_corrective_factor import PMICorrectiveFactor
 from app.services.pmi.orchestrator import PMIOrchestrator
+from app.schemas.pmi_results import PMIMethodResult
 
 
 class InvalidCorrectionFactor(ValueError):
@@ -23,7 +24,7 @@ class PMIService:
         )
         return list(db.scalars(statement).all())
 
-    def calculate_all_methods(self, input_params: dict[str, Any], *, db: Session) -> list[dict[str, Any]]:
+    def evaluate_all_methods(self,input_params: dict,*,db) -> list[PMIMethodResult]:
         factor_exists = select(
             select(PMICorrectiveFactor.id)
             .where(PMICorrectiveFactor.cf_value == input_params["correction_factor"])
@@ -32,7 +33,20 @@ class PMIService:
         if not db.scalar(factor_exists):
             raise InvalidCorrectionFactor("CF is not present in the database catalog")
 
-        return self.orchestrator.calculate(input_params)
+        return self.orchestrator.evaluate(input_params)
+
+    def calculate_all_methods(self, input_params: dict, *, db) -> list[dict]:
+        evaluated_results = self.evaluate_all_methods(input_params, db=db)
+        return [
+            {
+                "method_name": result.method_id,
+                "pmi_value": result.pmi_hours,
+                "input_params": input_params,
+                "method_version": result.method_version,
+            }
+            for result in evaluated_results
+            if result.calculation_status == "calculated"
+        ]
 
     def calculate_median(self, results: list[dict[str, Any]], selected_methods: list[str] )-> float:
 

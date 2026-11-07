@@ -21,7 +21,12 @@ class PMICalculation(Base):
     #it is possible that a user wants to calculate the median by choosing the prefered available results instead of the total amount
     median_selected_methods: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default=text("'[]'"))
 
-    median_pmi: Mapped[float] = mapped_column(Float, nullable=False)
+    median_pmi: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    evaluation_snapshot: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),server_default=func.now(), nullable=False)
 

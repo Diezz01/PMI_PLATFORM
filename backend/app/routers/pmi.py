@@ -1,18 +1,18 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from redis.exceptions import RedisError
-
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
+from pydantic import ValidationError
 
+from app.schemas.pmi_median import PMIMedianResult, PMIMedianSelection
+from app.schemas.pmi_results import PMIMethodResult
+from app.services.pmi.median_service import PMIMedianService
 from app.database import get_db
-
 from app.configs.dependencies import get_current_user
-
 from app.models.user import User
 from app.models.pmi_calculation import PMICalculation, PMIResult
-
 from app.schemas.pmi import (
     PMICorrectiveFactorResponse,
     PMICorrectiveFactorsResponse,
@@ -28,9 +28,7 @@ from app.schemas.pmi import (
     PMIHistoryItem,
     PMIHistoryResponse
 )
-
 from app.services.pmi.pmi_service import InvalidCorrectionFactor, PMIService
-
 from app.services.pmi.session_store import (
     PMISessionConflict,
     PMISessionLimitReached,
@@ -47,6 +45,79 @@ router = APIRouter(
 
 pmi_service = PMIService()
 logger = logging.getLogger(__name__)
+
+def _prepare_median_update(
+    session: dict,
+    request: PMIMedianRequest,
+) -> tuple[PMIMedianResult, dict]:
+    if session["version"] != request.expected_version:
+        raise HTTPException(
+            status_code=409,
+            detail="La sessione è cambiata. Ricaricala prima di continuare.",
+        )
+
+    if session["status"] not in {"calculated", "median_ready"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Lo stato della sessione non permette di modificare la mediana.",
+        )
+
+    stored_results = session.get("evaluated_results")
+
+    if stored_results is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Questa sessione usa il vecchio formato. Ripeti il calcolo.",
+        )
+
+    try:
+        evaluated_results = [
+            PMIMethodResult.model_validate(result)
+            for result in stored_results
+        ]
+    except ValidationError:
+        raise HTTPException(
+            status_code=409,
+            detail="Gli esiti della sessione non sono compatibili. Ripeti il calcolo.",
+        ) from None
+
+    selection = PMIMedianSelection(
+        selected_method_ids=request.selected_method_ids,
+        acknowledged_warning_method_ids=(
+            request.acknowledged_warning_method_ids
+        ),
+    )
+
+    try:
+        median_result = PMIMedianService().calculate(
+            evaluated_results,
+            selection,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from None
+
+    updates = {
+        # Compatibilità temporanea con riepiloghi e salvataggio esistenti.
+        "selected_median_methods": median_result.selected_method_ids,
+        "median_pmi": median_result.pmi_hours,
+
+        # Conserva anche le conferme esplicite degli avvisi.
+        "median_result": median_result.model_dump(
+            mode="json",
+            exclude={"pmi_display"},
+        ),
+
+        "status": (
+            "median_ready"
+            if median_result.status == "calculated"
+            else "calculated"
+        ),
+    }
+
+    return median_result, updates
 
 def _redis_unavailable() -> HTTPException:
     return HTTPException(
@@ -85,17 +156,37 @@ def list_correction_factors(
 @router.post(
     "/calculate",
     response_model=PMICalculateResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+    status_code=status.HTTP_201_CREATED
+    )
 def calculate_pmi(
     request: PMICalculateRequest,
     current_user: User = Depends(get_current_user),
     session_store: PMISessionStore = Depends(get_pmi_session_store),
     db: Session = Depends(get_db),
 ) -> PMICalculateResponse:
-    input_data = request.input_data.model_dump()
+    input_data = request.input_data.model_dump(exclude_none=True)
     try:
-        results = pmi_service.calculate_all_methods(input_data, db=db)
+        evaluated_results = pmi_service.evaluate_all_methods(input_data, db=db)
+
+        # Formato temporaneo per gli endpoint esistenti.
+        results = [
+            {
+                "method_name": result.method_id,
+                "pmi_value": result.pmi_hours,
+                "input_params": input_data,
+                "method_version": result.method_version,
+            }
+            for result in evaluated_results
+            if result.calculation_status == "calculated"
+        ]
+
+        stored_evaluated_results = [
+            result.model_dump(
+                mode="json",
+                exclude={"applicability", "pmi_display"},
+            )
+            for result in evaluated_results
+        ]
     except InvalidCorrectionFactor as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -116,6 +207,7 @@ def calculate_pmi(
             user_id=current_user.id,
             input_data=input_data,
             results=results,
+            evaluated_results=stored_evaluated_results
         )
     except PMISessionLimitReached as exc:
         raise HTTPException(
@@ -129,6 +221,8 @@ def calculate_pmi(
         session_id=session["session_id"],
         status=session["status"],
         expires_at=session["expires_at"],
+        version=session["version"],
+        evaluated_results=evaluated_results,
         results=[
             PMIResultResponse(
                 method_name=result["method_name"],
@@ -160,6 +254,7 @@ def list_pmi_sessions(
             status=session["status"],
             created_at=session["created_at"],
             expires_at=session["expires_at"],
+            version=session["version"],
             available_methods=[
                 result["method_name"] for result in session["results"]
             ],
@@ -194,43 +289,12 @@ def calculate_session_median(
     except RedisError as exc:
         raise _redis_unavailable() from exc
 
-    if session["status"] not in {"calculated", "median_ready"}:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This PMI calculation is not available for median selection",
-        )
-
-    results_by_method = {
-        result["method_name"]: result for result in session["results"]
-    }
-    unknown_methods = set(request.selected_methods) - set(results_by_method)
-
-    if unknown_methods:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="One or more selected methods are not available in this session",
-        )
-
-    selected_results = [
-        results_by_method[method_name]
-        for method_name in request.selected_methods
-    ]
-
+    median_result, updates = _prepare_median_update(session, request)
     try:
-        median_pmi = pmi_service.calculate_median(
-            session["results"],
-            request.selected_methods,
-        )
-
-        expected_version = session["version"]
-        session["selected_median_methods"] = request.selected_methods
-        session["median_pmi"] = median_pmi
-        session["status"] = "median_ready"
-
         updated_session = session_store.update_session(
             user_id=current_user.id,
-            session=session,
-            expected_version=expected_version,
+            session={**session, **updates},
+            expected_version=request.expected_version,
         )
     except PMISessionNotFound as exc:
         raise HTTPException(
@@ -253,18 +317,9 @@ def calculate_session_median(
     return PMIMedianResponse(
         session_id=updated_session["session_id"],
         status=updated_session["status"],
-        selected_methods=updated_session["selected_median_methods"],
-        median_pmi=_format_pmi_hhmm(updated_session["median_pmi"]),
-        selected_results=[
-            PMIResultResponse(
-                method_name=result["method_name"],
-                pmi_value=_format_pmi_hhmm(result["pmi_value"]),
-                input_params=result["input_params"],
-                method_version=result["method_version"],
-            )
-            for result in selected_results
-        ],
+        median=median_result,
         expires_at=updated_session["expires_at"],
+        version=updated_session["version"],
     )
 
 
@@ -313,6 +368,7 @@ def _build_save_response(
     return PMISaveResponse(
         calculation_id=calculation.id,
         session_id=session_id,
+        evaluation_snapshot=calculation.evaluation_snapshot,
         saved_results=[
             PMIResultResponse(
                 method_name=result.method_name,
@@ -364,10 +420,10 @@ def save_pmi_session(
     except RedisError as exc:
         raise _redis_unavailable() from exc
 
-    if session["status"] != "median_ready":
+    if session["status"] not in {"calculated", "median_ready"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Calculate the median before saving this PMI session",
+            detail="This PMI session is not available for saving",
         )
 
     results_by_method = {
@@ -386,13 +442,44 @@ def save_pmi_session(
         results_by_method[method_name]
         for method_name in request.selected_methods
     ]
+    median_pmi = session.get("median_pmi")
+
+    median_selected_methods = (
+        list(session.get("selected_median_methods", []))
+        if median_pmi is not None
+        else []
+    )
+
+    # La selezione per il salvataggio e quella per la mediana
+    # rimangono indipendenti. Conserviamo i dettagli di entrambe.
+    snapshot_method_ids = (
+        set(request.selected_methods)
+        | set(median_selected_methods)
+    )
+
+    stored_evaluated_results = session.get("evaluated_results")
+    evaluation_snapshot = None
+
+    if stored_evaluated_results is not None:
+        evaluation_snapshot = {
+            "schema_version": 1,
+            "session_version": session["version"],
+            "saved_method_ids": list(request.selected_methods),
+            "evaluated_results": [
+                result
+                for result in stored_evaluated_results
+                if result["method_id"] in snapshot_method_ids
+            ],
+            "median_result": session.get("median_result"),
+        }
 
     calculation = PMICalculation(
         user_id=current_user.id,
         session_id=session_id,
         input_data=session["input_data"],
-        median_pmi=session["median_pmi"],
-        median_selected_methods=session["selected_median_methods"],
+        median_pmi=median_pmi,
+        median_selected_methods=median_selected_methods,
+        evaluation_snapshot=evaluation_snapshot,
         results=[
             PMIResult(
                 method_name=result["method_name"],
@@ -477,6 +564,7 @@ def get_pmi_history(
             input_data=calculation.input_data,
             median_selected_methods=calculation.median_selected_methods,
             median_pmi=_format_pmi_hhmm(calculation.median_pmi),
+            evaluation_snapshot=calculation.evaluation_snapshot,
             saved_results=[
                 PMIResultResponse(
                     method_name=result.method_name,
