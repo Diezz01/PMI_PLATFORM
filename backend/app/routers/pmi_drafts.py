@@ -26,7 +26,7 @@ from app.services.pmi.session_store import (
     PMISessionNotFound,
 )
 from app.database import get_db
-from app.routers.pmi import calculate_and_store_pmi
+from app.routers.pmi import _calculate_and_store_pmi
 from app.schemas.pmi import PMICalculateRequest, PMICalculateResponse
 from app.schemas.pmi_draft import PMIDraftCalculateRequest
 from app.services.pmi.session_store import (
@@ -242,7 +242,7 @@ def calculate_from_draft(
         # una copia validata dei dati da calcolare.
         calculation_input = draft_service.get_calculation_input(state)
 
-    return calculate_and_store_pmi(
+    return _calculate_and_store_pmi(
         request=PMICalculateRequest(input_data=calculation_input),
         current_user=current_user,
         session_store=session_store,
