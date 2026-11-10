@@ -69,7 +69,7 @@ def hennsge_estimation(
     rectal_temperature_c: float,
     ambient_temperature_c: float,
     body_mass_kg: float,
-    cf: float)-> PMIMethodResult : 
+    cf: float)-> float : 
     q = calculate_temperature_ratio(rectal_temperature_c, ambient_temperature_c)
 
     if body_mass_kg <= 0:
@@ -139,7 +139,7 @@ def hennsge_estimation(
         "The numerical solver exceeded its iteration limit"
     )
 
-class HennsgePMICalculator(PMICalculator):
+class HenssgePMICalculator(PMICalculator):
     @property
     def name(self)-> str:
         return "hennsge"

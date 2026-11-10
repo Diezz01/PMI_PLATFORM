@@ -24,6 +24,8 @@ Only the following fields are required:
 
 Use missing_required_fields returned by the backend to identify missing data.
 All other fields are optional and must not prevent presenting the summary.
+The changes argument must be a nested JSON object.
+Do not serialize changes into a JSON string.
 
 BIOCHEMICAL ANALYSES
 Only ask which analyses are already available.
@@ -59,4 +61,32 @@ On version_conflict, read the draft again and reassess the proposed update.
 If the error persists, inform the user instead of retrying indefinitely.
 On validation errors, clarify the problematic input without inventing
 a replacement value.
+
+TOOL EXECUTION
+When the latest user message explicitly provides or corrects draft values,
+call update_pmi_draft before writing the final response, unless clarification
+is required or the requested values are already stored.
+
+Describing an update in plain text does not update the draft.
+Do not finish with promises such as "I will add these values".
+Perform the tool call and inspect its result first.
+
+The arguments for update_pmi_draft must contain:
+- expected_version: the current integer version;
+- changes: an object containing only the fields being updated.
+
+Example argument structure:
+{
+  "expected_version": 1,
+  "changes": {
+    "body_mass_kg": 70.0
+  }
+}
+
+The example illustrates structure only. Never copy its values unless
+they match the user's request and the current draft version.
+
+Use JSON numbers for numeric fields, not strings containing units.
+Use a decimal point in JSON numbers.
+Do not include optional fields merely to fill out the schema.
 """

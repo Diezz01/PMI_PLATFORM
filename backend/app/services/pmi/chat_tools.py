@@ -1,5 +1,5 @@
 from typing import Any
-
+import json
 from pydantic import ValidationError
 from redis.exceptions import RedisError
 
@@ -97,7 +97,32 @@ class PMIChatTools:
                 "unknown_tool",
                 "Strumento non disponibile.",
             )
+        # Normalize JSON-encoded objects produced by the model.
+        # This compatibility handling applies only to the LLM tool.
+        if (
+            tool_name == "update_pmi_draft"
+            and isinstance(arguments.get("changes"), str)
+        ):
+            try:
+                decoded_changes = json.loads(arguments["changes"])
+            except (ValueError, RecursionError):
+                return self._error(
+                    "invalid_arguments",
+                    "changes must be a JSON object. "
+                    "The supplied string could not be decoded.",
+                )
 
+            if not isinstance(decoded_changes, dict):
+                return self._error(
+                    "invalid_arguments",
+                    "changes must decode to a JSON object, "
+                    "not a list, number, string or null.",
+                )
+
+            arguments = {
+                **arguments,
+                "changes": decoded_changes,
+            }
         try:
             parsed_arguments = argument_model.model_validate(arguments)
         except ValidationError as exc:
@@ -161,10 +186,11 @@ class PMIChatTools:
         except (PMIDraftConflict, PMISessionConflict):
             return self._error(
                 "version_conflict",
-                
+                "Read the draft again before updating it.",
             )
 
         except RedisError:
             return self._error(
                 "storage_unavailable",
+                "Draft storage is unavailable. Do not report a successful update.",
             )

@@ -45,7 +45,7 @@ class PMIDraftService:
         merged_data = draft.data.model_dump()
 
         for field, value in changes.items():
-            if field == "exclusion_conditions":
+            if field == "exclusion_criteria":
                 merged_data[field] = {
                     **merged_data[field],
                     **value,
