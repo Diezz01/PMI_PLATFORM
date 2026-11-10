@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routers import users, auth, admin, pmi, web_auth, pmi_drafts
+from app.routers import users, auth, admin, pmi, web_auth, pmi_drafts, pmi_chat
 
 
 
@@ -17,6 +17,7 @@ app.include_router(admin.router)
 app.include_router(pmi.router)
 app.include_router(web_auth.router)
 app.include_router(pmi_drafts.router)
+app.include_router(pmi_chat.router)
 
 
 @app.get("/")
