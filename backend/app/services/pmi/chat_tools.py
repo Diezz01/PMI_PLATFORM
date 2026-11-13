@@ -66,6 +66,7 @@ class PMIChatTools:
     def __init__(self, store: PMIDraftStore) -> None:
         self.store = store
         self.service = PMIDraftService()
+        self.protected_fields: set[str] = set()
 
     @staticmethod
     def _error(code: str, message: str, **details: Any) -> dict:
@@ -140,6 +141,14 @@ class PMIChatTools:
                 **arguments,
                 "changes": decoded_changes,
             }
+        if tool_name == "update_pmi_draft" and isinstance(arguments.get("changes"), dict):
+            arguments = {**arguments, "changes": {
+                key: value for key, value in arguments["changes"].items()
+                if key not in self.protected_fields
+            }}
+            if not arguments["changes"] and self.protected_fields:
+                return self.execute(tool_name="read_pmi_draft", arguments={},
+                                    user_id=user_id, draft_id=draft_id)
         try:
             parsed_arguments = argument_model.model_validate(arguments)
         except ValidationError as exc:

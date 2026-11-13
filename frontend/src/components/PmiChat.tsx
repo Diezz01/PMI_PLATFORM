@@ -129,13 +129,13 @@ export default function PmiChat({ draftId, onDeleted }: Props) {
       <section className={styles.chatPanel} aria-label="PMI conversation">
         <div className={styles.toolbar}>
           <h1>PMI assistant</h1>
-          <button
+          {/*<button
             type="button"
             onClick={() => void chat.reload()}
             disabled={chat.working || deleting}
           >
             Refresh
-          </button>
+          </button>*/}
           <button
             type="button"
             onClick={() => void removeChat()}
@@ -249,8 +249,8 @@ export default function PmiChat({ draftId, onDeleted }: Props) {
         )}
 
         <p className={styles.hint}>
-          This first view shows the four required parameters.
-          Confirmation and calculation controls will be added next.
+          This panel shows the four required parameters. Review the complete
+          summary in the chat, then confirm there to calculate PMI.
         </p>
       </aside>
     </div>

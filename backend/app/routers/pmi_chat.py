@@ -22,6 +22,13 @@ from app.services.pmi.draft_store import (
 )
 from app.services.pmi.ollama_client import OllamaError
 from app.services.pmi.session_store import PMISessionNotFound
+from app.services.pmi.chat_workflow import interpret_intent, advance_workflow
+from app.services.pmi.chat_biology import extract_biology, resolve_biology, pending_question, FIELDS
+from app.database import get_db
+from sqlalchemy.orm import Session
+from app.routers.pmi_drafts import confirm_draft, calculate_from_draft
+from app.schemas.pmi_draft import PMIDraftConfirmRequest, PMIDraftCalculateRequest
+from app.services.pmi.session_store import PMISessionStore, get_pmi_session_store
 
 
 router = APIRouter(prefix="/pmi/drafts", tags=["PMI chat"])
@@ -162,6 +169,8 @@ def send_message(
     request: PMIChatRequest,
     current_user: User = Depends(get_current_user),
     store: PMIDraftStore = Depends(get_pmi_draft_store),
+    db: Session = Depends(get_db),
+    session_store: PMISessionStore = Depends(get_pmi_session_store),
 ) -> PMIChatResponse:
     # A synchronous endpoint runs in FastAPI's thread pool.
     # asyncio.run manages the asynchronous model calls inside that thread.
@@ -234,6 +243,11 @@ def send_message(
                 )
 
             history = _model_history(turns)
+            previous_turn = next((item for item in reversed(turns)
+                                  if item["status"] == "completed"), {})
+            previous_workflow = previous_turn.get("workflow", {})
+            pending_biology = next((item["pending_biology"] for item in reversed(turns)
+                                    if "pending_biology" in item), {})
 
             turn = {
                 "request_id": request_id,
@@ -250,18 +264,90 @@ def send_message(
                 store, current_user.id, draft_id, record, turns
             )
 
-            service = PMIChatService(PMIChatTools(store))
+            tools = PMIChatTools(store)
+            service = PMIChatService(tools)
 
             try:
-                outcome = asyncio.run(
-                    _run_turn(
-                        service,
-                        user_id=current_user.id,
-                        draft_id=draft_id,
-                        message=request.message,
-                        history=history,
-                    )
+                async def collect_biology():
+                    async with asyncio.timeout(20):
+                        return await extract_biology(request.message, pending_biology, record["input_data"]["data"])
+                edits = asyncio.run(collect_biology())
+                biological_changes, pending_biology = resolve_biology(
+                    edits, pending_biology, record["input_data"]["data"],
                 )
+                if biological_changes:
+                    updated = tools.execute(tool_name="update_pmi_draft", arguments={
+                        "expected_version": record["input_data"]["version"],
+                        "changes": biological_changes,
+                    }, user_id=current_user.id, draft_id=draft_id)
+                    if not updated["ok"]:
+                        raise PMIChatError(updated["error"]["message"])
+                turn["pending_biology"] = pending_biology
+                _save_turns(store, current_user.id, draft_id, record, turns)
+                tools.protected_fields = set(FIELDS)
+                async def classify():
+                    async with asyncio.timeout(20):
+                        return await interpret_intent(
+                            request.message, previous_workflow,
+                            previous_turn.get("assistant_message", ""),
+                        )
+                intent = asyncio.run(classify())
+                if edits.edits:
+                    intent.action = "provide_data"
+                if intent.action in {"finish_collection", "confirm_calculation"}:
+                    current = tools.execute(tool_name="read_pmi_draft", arguments={},
+                                            user_id=current_user.id, draft_id=draft_id)
+                    if not current["ok"]:
+                        raise PMIChatError(current["error"]["message"])
+                    outcome = {"draft": current["draft"], "reply": (
+                        "Mancano ancora i dati obbligatori: " if intent.language == "it"
+                        else "Required fields are still missing: "
+                    ) + ", ".join(current["draft"]["missing_required_fields"])}
+                else:
+                    outcome = asyncio.run(_run_turn(
+                        service, user_id=current_user.id, draft_id=draft_id,
+                        message=request.message, history=history,
+                    ))
+
+                def confirm_and_calculate(expected_version):
+                    confirmed = confirm_draft(
+                        draft_id=draft_id,
+                        request=PMIDraftConfirmRequest(expected_version=expected_version),
+                        current_user=current_user, store=store,
+                    )
+                    result = calculate_from_draft(
+                        draft_id=draft_id,
+                        request=PMIDraftCalculateRequest(expected_version=confirmed.version),
+                        current_user=current_user, store=store,
+                        session_store=session_store, db=db,
+                    )
+                    return result.model_dump(mode="json"), confirmed.version
+
+                if pending_biology:
+                    workflow = {**previous_workflow, "stage": "biology", "collection_closed": False}
+                    workflow.pop("summary_version", None)
+                    reply = pending_question(pending_biology, intent.language == "it")
+                    calculation = None
+                else:
+                    reply, workflow, calculation = advance_workflow(
+                        previous=previous_workflow, intent=intent,
+                        draft=outcome["draft"], reply=outcome["reply"],
+                        calculate=confirm_and_calculate,
+                    )
+                outcome["reply"] = reply
+                turn["workflow"] = workflow
+                # Computed fields are regenerated by Pydantic when reading history.
+                turn["calculation"] = None if calculation is None else {
+                    **calculation,
+                    "evaluated_results": [
+                        {key: value for key, value in method.items()
+                         if key not in {"applicability", "pmi_display"}}
+                        for method in calculation["evaluated_results"]
+                    ],
+                }
+            except HTTPException as exc:
+                turn["status"] = "failed"
+                turn["error"] = str(exc.detail)
             except (OllamaError, PMIChatError, TimeoutError):
                 turn["status"] = "failed"
                 turn["error"] = (

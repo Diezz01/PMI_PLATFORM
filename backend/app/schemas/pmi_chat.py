@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.pmi_draft import PMIDraftResponse
+from app.schemas.pmi import PMICalculateResponse
 
 
 class PMIChatRequest(BaseModel):
@@ -24,6 +25,7 @@ class PMIChatTurn(BaseModel):
     status: Literal["processing", "completed", "failed"]
     created_at: datetime
     error: str | None = None
+    calculation: PMICalculateResponse | None = None
 
 
 class PMIChatResponse(BaseModel):

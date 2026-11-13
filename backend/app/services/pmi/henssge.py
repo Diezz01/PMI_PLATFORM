@@ -15,6 +15,7 @@ ALLOMETRIC_MASS_EXPONENT = -0.625
 ASYMPTOTIC_CONSTATNT = 0.0284
 MAX_BRACKET_ITERATIONS = 64
 MAX_SOLVER_ITERATIONS = 200
+TIME_TOLERANCE_HOURS = 1e-6
 
 
 class HenssgeDomainError(ValueError):
@@ -114,7 +115,6 @@ def hennsge_estimation(
     else:
         raise HenssgeConvergenceError("Could not bracket the numerical solution")
 
-    result : PMIMethodResult = PMIMethodResult()
     for _ in range(MAX_SOLVER_ITERATIONS):
         midpoint = lower + (upper - lower) / 2.0
         error = residual(midpoint)
@@ -206,7 +206,7 @@ class HenssgePMICalculator(PMICalculator):
                 rectal_temperature_c=parameters["rectal_temperature_c"],
                 ambient_temperature_c=parameters["ambient_temperature_c"],
                 body_mass_kg=parameters["body_mass_kg"],
-                correction_factor=parameters["correction_factor"],
+                cf=parameters["correction_factor"],
             )
         except HenssgeInputError as exc:
             return self._failure(
