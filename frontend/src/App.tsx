@@ -95,7 +95,7 @@ function App() {
             </button>
           </section>
         ) : session ? (
-          <Dashboard />
+          <Dashboard key={session.user.id} userId={session.user.id} />
         ) : (
           <div className={styles.authPanel}>
             {authView === 'register' ? (

@@ -96,7 +96,7 @@ const DEFAULT_TIMEOUT_MS = 20_000
 const CHAT_TIMEOUT_MS = 330_000
 
 type RequestOptions = {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'DELETE'
   body?: unknown
   timeoutMs?: number
   signal?: AbortSignal
@@ -198,6 +198,10 @@ async function requestJson<T>(
       )
     }
 
+    if (response.status === 204 && method === 'DELETE') {
+      return undefined as T
+    }
+
     if (!isRecord(payload)) {
       throw new PmiApiError(
         'The server returned an unexpected response.',
@@ -241,6 +245,10 @@ export function createDraft(): Promise<PmiDraft> {
   return requestJson<PmiDraft>('/drafts', {
     method: 'POST',
   })
+}
+
+export function deleteDraft(draftId: string): Promise<void> {
+  return requestJson<void>(draftPath(draftId), { method: 'DELETE' })
 }
 
 export function getDraft(

@@ -21,6 +21,7 @@ async def chat_with_ollama(
     *,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
+    response_format: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": settings.OLLAMA_MODEL,
@@ -29,6 +30,7 @@ async def chat_with_ollama(
         "think": False,
         "keep_alive": "5m",
         "options": {
+            "temperature": 0,
             "num_ctx": settings.OLLAMA_CONTEXT_TOKENS,
             "num_predict": settings.OLLAMA_MAX_OUTPUT_TOKENS,
         },
@@ -36,6 +38,8 @@ async def chat_with_ollama(
 
     if tools:
         payload["tools"] = tools
+    if response_format is not None:
+        payload["format"] = response_format
 
     timeout = httpx.Timeout(
         settings.OLLAMA_TIMEOUT_SECONDS,

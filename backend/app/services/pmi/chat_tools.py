@@ -20,6 +20,23 @@ from app.services.pmi.session_store import (
 )
 
 
+def _inline_schema_refs(schema: dict) -> dict:
+    """Expose field types directly to the model instead of local $defs links."""
+    definitions = schema.get("$defs", {})
+
+    def expand(value):
+        if isinstance(value, list):
+            return [expand(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        if "$ref" in value:
+            name = value["$ref"].removeprefix("#/$defs/")
+            return expand({**definitions[name], **{k: v for k, v in value.items() if k != "$ref"}})
+        return {key: expand(item) for key, item in value.items() if key != "$defs"}
+
+    return expand(schema)
+
+
 # Contratti interni, indipendenti dal provider LLM.
 # Li adatteremo al formato richiesto dal provider quando lo collegheremo.
 TOOL_DEFINITIONS = [
@@ -40,7 +57,7 @@ TOOL_DEFINITIONS = [
             "as complete objects, including the technique when required. "
             "Use the latest draft version."
         ),
-        "parameters": PMIDraftUpdateRequest.model_json_schema(),
+        "parameters": _inline_schema_refs(PMIDraftUpdateRequest.model_json_schema()),
     },
 ]
 

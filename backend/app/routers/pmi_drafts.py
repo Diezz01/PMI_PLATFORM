@@ -207,10 +207,23 @@ def delete_draft(
     store: PMIDraftStore = Depends(get_pmi_draft_store),
 ) -> None:
     with _handle_errors():
-        store.delete_session(
-            user_id=current_user.id,
-            session_id=draft_id,
+        # Share the chat lock so an active turn cannot recreate deleted history.
+        lock = store.client.lock(
+            f"pmi:chat-lock:{current_user.id}:{draft_id}",
+            timeout=30,
+            blocking=False,
         )
+        if not lock.acquire(blocking=False):
+            raise HTTPException(status_code=409, detail="Wait for the current reply before deleting the chat.")
+        try:
+            store.delete_session(
+                user_id=current_user.id,
+                session_id=draft_id,
+            )
+            store.client.delete(f"pmi:chat:{current_user.id}:{draft_id}")
+        finally:
+            if lock.owned():
+                lock.release()
 
 @router.post(
     "/{draft_id}/calculate",
