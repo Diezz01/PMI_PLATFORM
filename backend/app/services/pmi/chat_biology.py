@@ -17,7 +17,7 @@ class BiologicalEdit(BaseModel):
     action: Literal["provide", "unavailable", "remove"]
     value: float | None
     technique: str | None
-    evidence: str = ""
+    evidence: str
 
 
 class BiologicalEdits(BaseModel):
@@ -30,6 +30,12 @@ async def extract_biology(message: str, pending: dict, data: dict) -> Biological
         {"role": "system", "content": (
             "Extract changes to K+/potassium, Hx/hypoxanthine and U/Am only. Return JSON. "
             "Extract ONLY explicit values or technique choices from the latest user message. "
+            "Process biological values even when the same message also contains "
+            "time gap, geographical origin or other non-biological parameters. "
+            "A missing technique does not justify dropping an explicitly supplied value: "
+            "emit the value with technique=null so the backend can ask for the technique. "
+            "Copy evidence exactly from the original message, preserving its spelling "
+            "and punctuation; do not translate or paraphrase it. "
             "For no relevant changes return edits: []. Do not infer or invent a technique. "
             "Generic statements like 'no other data', 'proceed' or 'confirm' mean edits: [], "
             "not unavailable or removal of any measurement. "

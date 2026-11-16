@@ -7,6 +7,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useExternalStoreRuntime,
+  useMessagePartText,
 } from '@assistant-ui/react'
 
 import type {
@@ -31,11 +32,28 @@ function UserMessage() {
   )
 }
 
+function AssistantText() {
+  const { text } = useMessagePartText()
+  const parts = text.split(/(\*\*[^*\n]+\*\*)/g)
+
+  return (
+    <span>
+      {parts.map((part, index) =>
+        part.startsWith('**') && part.endsWith('**') ? (
+          <strong key={index}>{part.slice(2, -2)}</strong>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </span>
+  )
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className={styles.assistantMessage}>
       <span className={styles.speaker}>Assistant</span>
-      <MessagePrimitive.Parts />
+      <MessagePrimitive.Parts components={{ Text: AssistantText }} />
     </MessagePrimitive.Root>
   )
 }

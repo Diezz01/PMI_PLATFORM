@@ -86,77 +86,95 @@ def summary_text(draft: dict, italian: bool) -> str:
 
 
 def result_text(result: dict, italian: bool) -> str:
-    def format_hours(hours: float) -> str:
-        total_minutes = int(hours * 60 + 0.5)
-        hh, mm = divmod(total_minutes, 60)
-        return f"{hh:02d}:{mm:02d}"
+    labels = {
+        "analytical_technique": ("tecnica di analisi", "analytical technique"),
+        "geographical_origin": ("provenienza geografica", "geographical origin"),
+        "vitreous_contamination": (
+            "assenza di contaminazione dell'umor vitreo",
+            "absence of vitreous contamination",
+        ),
+        "sampling_window": ("prelievo entro 104 ore", "sampling within 104 hours"),
+        "scientific_applicability": (
+            "applicabilità scientifica completa", "full scientific applicability",
+        ),
+        "time_gap_adjustment": ("compatibilità del time gap", "time-gap compatibility"),
+    }
+    lines = ["Estimated PMI:", ""]
+    methods = sorted(
+        (method for method in result["evaluated_results"]
+         if method["method_kind"] != "mock"),
+        key=lambda method: method["method_kind"] != "henssge",
+    )
+    gap = next(
+        (method["time_gap_minutes"] for method in methods
+         if method.get("time_gap_minutes") is not None),
+        None,
+    )
+    if gap is None:
+        # Legacy results also retain the supplied inputs, including when no
+        # biological method can produce an estimate.
+        gap = next(
+            (item.get("input_params", {}).get("time_gap_minutes")
+             for item in result.get("results", [])
+             if item.get("input_params", {}).get("time_gap_minutes") is not None),
+            None,
+        )
+    gap_value = f"{gap} min" if gap is not None else (
+        "non fornito" if italian else "not provided"
+    )
+    gap_line = f"Time gap: {gap_value}"
+    gap_shown = False
 
-    lines = [
-        "Risultati restituiti dal backend:"
-        if italian
-        else "Results returned by the backend:"
-    ]
-
-    for method in result["evaluated_results"]:
-        if method["method_kind"] == "mock":
-            continue
+    for method in methods:
+        if method["method_kind"] != "henssge" and not gap_shown:
+            lines.extend(["", gap_line, ""])
+            gap_shown = True
 
         value = method.get("pmi_display")
-
         if value is None:
-            description = (
-                "risultato finale non disponibile"
-                if italian
-                else "final result unavailable"
-            )
-        else:
-            description = f"{value} (hh:mm)"
+            value = "non calcolabile" if italian else "not calculable"
+        line = f"- **{method['method_name']}:** {value}"
+        if (
+            method["method_kind"] == "biochemical"
+            and method.get("time_reference") == "sampling"
+        ):
+            line += " (al prelievo)" if italian else " (at sampling)"
 
-        lines.append(f"- {method['method_name']}: {description}")
-
-        reference = method.get("time_reference")
-
-        if reference == "temperature_measurement":
-            lines.append(
-                "  Riferito alla misurazione della temperatura."
-                if italian
-                else "  Relative to temperature measurement."
-            )
-        elif reference == "sampling":
-            lines.append(
-                "  Riferito al prelievo."
-                if italian
-                else "  Relative to sampling."
-            )
-
-        if method["method_kind"] == "henssge":
-            lines.append(
-                "  Henssge non viene modificato dal time gap."
-                if italian
-                else "  Henssge is not modified by the time gap."
-            )
-
-        if method["method_kind"] == "biochemical":
-            original = method.get("pmi_at_sampling_hours")
-            gap = method.get("time_gap_minutes")
-
-            if original is not None:
-                label = (
-                    "Valore originale al prelievo"
-                    if italian
-                    else "Original estimate at sampling"
-                )
-                lines.append(
-                    f"  {label}: {format_hours(original)} (hh:mm)."
-                )
-
-            if gap is not None:
-                lines.append(f"  Time gap: {gap} min.")
-
+        failed = []
+        unknown = []
         for check in method["checks"]:
-            if check["outcome"] in {"failed", "unknown"}:
-                lines.append("  " + check["message"])
+            outcome = check["outcome"]
+            if outcome not in {"failed", "unknown"}:
+                continue
+            check_id = check["id"]
+            # Keep development metadata in the result, outside the compact chat summary.
+            if method["method_kind"] == "henssge" and check_id == "scientific_applicability":
+                continue
+            if check_id == "time_gap_adjustment" and outcome == "unknown":
+                label = "time gap non fornito" if italian else "time gap not provided"
+            elif check_id == "sampling_window" and method["method_id"] != "sturner_1963":
+                # Other formulas may have different sampling windows.
+                label = check["message"].strip().rstrip(".")
+            elif check_id in labels:
+                label = labels[check_id][0 if italian else 1]
+            else:
+                label = check["message"].strip().rstrip(".")
+            target = failed if outcome == "failed" else unknown
+            if label not in target:
+                target.append(label)
 
+        notes = []
+        if failed:
+            prefix = "Non soddisfatti: " if italian else "Not satisfied: "
+            notes.append(prefix + "; ".join(failed))
+        if unknown:
+            prefix = "Non verificati: " if italian else "Not verified: "
+            notes.append(prefix + "; ".join(unknown))
+        if notes:
+            line += " — " + ". ".join(notes) + "."
+        lines.append(line)
+    if not gap_shown:
+        lines.extend(["", gap_line])
     return "\n".join(lines)
 
 
