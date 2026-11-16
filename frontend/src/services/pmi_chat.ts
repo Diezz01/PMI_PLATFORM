@@ -52,6 +52,8 @@ export type MethodResult = {
     | 'blocked'
     | 'error'
   pmi_hours: number | null
+  pmi_at_sampling_hours: number | null
+  time_gap_minutes: number | null
   pmi_display: string | null
   time_reference: 'temperature_measurement' | 'sampling' | null
   applicability:

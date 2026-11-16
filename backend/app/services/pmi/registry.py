@@ -1,6 +1,7 @@
 from app.services.pmi.base_calculator import PMICalculator
 from app.services.pmi.mock import MockPMICalculator
 from app.services.pmi.henssge import HenssgePMICalculator
+from app.services.pmi.sturner import SturnerPMICalculator
 class PMICalculatorsRegistry:
     
     def __init__(self):
@@ -22,3 +23,4 @@ registry = PMICalculatorsRegistry()
 
 registry.register(MockPMICalculator())
 registry.register(HenssgePMICalculator())
+registry.register(SturnerPMICalculator())

@@ -47,6 +47,8 @@ class PMIMethodResult(BaseModel):
     ]
 
     pmi_hours: float | None = Field(default=None, ge=0)
+    pmi_at_sampling_hours: float | None = Field(default=None, ge=0)
+    time_gap_minutes: int | None = Field(default=None, ge=0)
 
     # Missed calculation
     checks: list[PMICheckResult] = Field(min_length=1)

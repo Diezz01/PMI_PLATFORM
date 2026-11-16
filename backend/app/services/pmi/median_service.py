@@ -28,6 +28,8 @@ class PMIMedianService:
 
         values: list[float] = []
         warning_methods: set[str] = set()
+        common_time_reference: str | None = None
+        common_time_gap: int | None = None
 
         for method_id in selection.selected_method_ids:
             result = results_by_id.get(method_id)
@@ -56,8 +58,20 @@ class PMIMedianService:
             ):
                 raise ValueError(f"Method '{method_id}' has an invalid PMI value")
 
-            if result.time_reference != "sampling":
-                raise ValueError("Method '{method_id}' must have a PMI referenced to the sampling time")
+            if result.time_reference not in {"sampling","temperature_measurement"}:
+                raise ValueError(f"Method '{method_id}' has no valid time reference.")
+
+            if common_time_reference is None:
+                common_time_reference = result.time_reference
+                common_time_gap = result.time_gap_minutes
+            elif (
+                result.time_reference != common_time_reference
+                or result.time_gap_minutes != common_time_gap
+            ):
+                raise ValueError(
+                    "Selected methods must share the same time reference "
+                    "and time gap."
+                )
 
             if result.applicability in {"unmatched", "unverified"}:
                 warning_methods.add(method_id)
@@ -86,4 +100,5 @@ class PMIMedianService:
                 selection.acknowledged_warning_method_ids.copy()
             ),
             pmi_hours=median_hours,
+            time_reference=common_time_reference
         )

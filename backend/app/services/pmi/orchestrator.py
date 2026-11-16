@@ -4,6 +4,7 @@ from typing import Any
 
 from app.schemas.pmi_results import PMICheckResult, PMIMethodResult
 from app.services.pmi.registry import registry
+from app.services.pmi.time_reference import apply_time_gap
 
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,11 @@ class PMIOrchestrator:
                     raise ValueError(
                         "Result metadata does not match the calculator"
                     )
+
+                result = apply_time_gap(
+                    result,
+                    input_data.get("time_gap_minutes"),
+                )
 
                 results.append(result)
 

@@ -86,19 +86,77 @@ def summary_text(draft: dict, italian: bool) -> str:
 
 
 def result_text(result: dict, italian: bool) -> str:
-    lines = ["Risultati restituiti dal backend:" if italian else "Results returned by the backend:"]
+    def format_hours(hours: float) -> str:
+        total_minutes = int(hours * 60 + 0.5)
+        hh, mm = divmod(total_minutes, 60)
+        return f"{hh:02d}:{mm:02d}"
+
+    lines = [
+        "Risultati restituiti dal backend:"
+        if italian
+        else "Results returned by the backend:"
+    ]
+
     for method in result["evaluated_results"]:
         if method["method_kind"] == "mock":
             continue
+
         value = method.get("pmi_display")
-        lines.append(f"- {method['method_name']}: " + (f"{value} (hh:mm)" if value is not None
-                     else ("non calcolabile" if italian else "not calculable")))
+
+        if value is None:
+            description = (
+                "risultato finale non disponibile"
+                if italian
+                else "final result unavailable"
+            )
+        else:
+            description = f"{value} (hh:mm)"
+
+        lines.append(f"- {method['method_name']}: {description}")
+
+        reference = method.get("time_reference")
+
+        if reference == "temperature_measurement":
+            lines.append(
+                "  Riferito alla misurazione della temperatura."
+                if italian
+                else "  Relative to temperature measurement."
+            )
+        elif reference == "sampling":
+            lines.append(
+                "  Riferito al prelievo."
+                if italian
+                else "  Relative to sampling."
+            )
+
         if method["method_kind"] == "henssge":
-            lines.append("  Riferito alla misurazione della temperatura, senza time gap." if italian
-                         else "  Relative to temperature measurement, without time gap.")
+            lines.append(
+                "  Henssge non viene modificato dal time gap."
+                if italian
+                else "  Henssge is not modified by the time gap."
+            )
+
+        if method["method_kind"] == "biochemical":
+            original = method.get("pmi_at_sampling_hours")
+            gap = method.get("time_gap_minutes")
+
+            if original is not None:
+                label = (
+                    "Valore originale al prelievo"
+                    if italian
+                    else "Original estimate at sampling"
+                )
+                lines.append(
+                    f"  {label}: {format_hours(original)} (hh:mm)."
+                )
+
+            if gap is not None:
+                lines.append(f"  Time gap: {gap} min.")
+
         for check in method["checks"]:
             if check["outcome"] in {"failed", "unknown"}:
                 lines.append("  " + check["message"])
+
     return "\n".join(lines)
 
 
