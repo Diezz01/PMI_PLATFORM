@@ -37,8 +37,8 @@ class PotassiumFormula(PMICalculator):
     def __init__(
         self, identifier: str, title: str, equation: Callable[[float], float],
         sampling_window: tuple[float, float], *,
-        techniques: tuple[str, ...] = ("photometer",),
-        areas: tuple[str, ...] = ("north_america", "usa"),
+        techniques: tuple[str, ...] = (),
+        areas: tuple[str, ...] = (),
         exclusions: tuple[str, ...] = (),
     ):
         self.identifier, self.title, self.equation = identifier, title, equation

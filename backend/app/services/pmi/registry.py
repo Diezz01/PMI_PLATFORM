@@ -3,6 +3,12 @@ from app.services.pmi.mock import MockPMICalculator
 from app.services.pmi.henssge import HenssgePMICalculator
 from app.services.pmi.sturner import SturnerPMICalculator
 from app.services.pmi.coe import CoePMICalculator
+from app.services.pmi.adjutantis import AdjutantisPMICalculator
+from app.services.pmi.agrarwal import AgrarwalPMICalculator
+from app.services.pmi.stephens import StephensPMICalculator
+from app.services.pmi.madea import MadeaPMICalculator
+from app.services.pmi.devenaux import DevenauxPMICalculator
+
 class PMICalculatorsRegistry:
     
     def __init__(self):
@@ -26,3 +32,8 @@ registry.register(MockPMICalculator())
 registry.register(HenssgePMICalculator())
 registry.register(SturnerPMICalculator())
 registry.register(CoePMICalculator())
+registry.register(AdjutantisPMICalculator())
+registry.register(AgrarwalPMICalculator())
+registry.register(StephensPMICalculator())
+registry.register(MadeaPMICalculator())
+registry.register(DevenauxPMICalculator())

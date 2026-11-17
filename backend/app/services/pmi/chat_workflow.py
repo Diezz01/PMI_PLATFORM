@@ -93,6 +93,27 @@ def result_text(result: dict, italian: bool) -> str:
             "assenza di contaminazione dell'umor vitreo",
             "absence of vitreous contamination",
         ),
+        "hydration_changes": (
+            "assenza di eccessiva idratazione o disidratazione",
+            "absence of excessive hydration or dehydration",
+        ),
+        "electrolyte_disturbances": (
+            "assenza di squilibri elettrolitici",
+            "absence of electrolyte disturbances",
+        ),
+        "child": ("soggetto adulto", "adult subject"),
+        "sepsis": ("assenza di sepsi", "absence of sepsis"),
+        "intoxication": ("assenza di intossicazione", "absence of intoxication"),
+        "hyperthermia": ("assenza di ipertermia", "absence of hyperthermia"),
+        "hypothermia": ("assenza di ipotermia", "absence of hypothermia"),
+        "drowning": ("assenza di affogamento", "absence of drowning"),
+        "kidney_disease": ("assenza di nefropatia", "absence of kidney disease"),
+        "agonal_period_over_6h": (
+            "assenza di agonia superiore a 6 ore", "absence of an agonal period over 6 hours",
+        ),
+        "high_blood_ammonium": (
+            "assenza di ammonio ematico elevato", "absence of elevated blood ammonium",
+        ),
         "sampling_window": (
             "finestra stimata di prelievo entro 104 ore",
             "estimated sampling window within 104 hours",
