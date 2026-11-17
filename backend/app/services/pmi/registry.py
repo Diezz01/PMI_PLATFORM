@@ -8,6 +8,7 @@ from app.services.pmi.agrarwal import AgrarwalPMICalculator
 from app.services.pmi.stephens import StephensPMICalculator
 from app.services.pmi.madea import MadeaPMICalculator
 from app.services.pmi.devenaux import DevenauxPMICalculator
+from app.services.pmi.rognum_h_1991 import RognumH1991PMICalculator
 
 class PMICalculatorsRegistry:
     
@@ -37,3 +38,4 @@ registry.register(AgrarwalPMICalculator())
 registry.register(StephensPMICalculator())
 registry.register(MadeaPMICalculator())
 registry.register(DevenauxPMICalculator())
+registry.register(RognumH1991PMICalculator())

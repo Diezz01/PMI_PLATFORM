@@ -2,28 +2,30 @@
 
 Branch validity is evaluated after adding the explicitly supplied time gap.
 """
-from app.services.pmi.potassium_formula import (
-    PotassiumFormula, validate_estimate, validate_potassium,
+from app.services.pmi.biochemical_formula import (
+    BiochemicalFormula, MeasurementRequirement, validate_estimate, validate_number,
 )
 from app.schemas.pmi_results import PMICheckResult
 
 
 def estimate_coe_hours(potassium_mmol_l: float, time_gap_minutes: int = 0) -> float:
-    potassium = validate_potassium(potassium_mmol_l)
+    potassium = validate_number(potassium_mmol_l, "Potassium", nonnegative=True)
     early = 3.01 * potassium - 15.03
     late = 6.15 * potassium - 38.1
     return validate_estimate(early if early + time_gap_minutes / 60.0 < 6 else late)
 
 
-class CoePMICalculator(PotassiumFormula):
+class CoePMICalculator(BiochemicalFormula):
     version = "development-2"
-    required_parameters = ["potassium", "time_gap_minutes"]
 
     def __init__(self):
-        super().__init__("coe_1969", "Coe (1969)", estimate_coe_hours, (0.5, 100.0))
-
-    def estimate_hours(self, potassium, parameters):
-        return estimate_coe_hours(potassium, parameters["time_gap_minutes"])
+        super().__init__(
+            identifier="coe_1969", title="Coe (1969)",
+            equation=lambda values: estimate_coe_hours(values["potassium"], values["time_gap_minutes"]),
+            measurements=(MeasurementRequirement("potassium", "mmol_l", ("photometer",)),),
+            required_values=("time_gap_minutes",),
+            sampling_window=(0.5, 100.0), areas=("north_america", "usa"),
+        )
 
     def evaluate(self, parameters):
         gap = parameters.get("time_gap_minutes")

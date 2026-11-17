@@ -57,8 +57,8 @@ LABELS = {
     "subject_area": ("Provenienza del soggetto", "Subject origin"),
     "potassium": ("K+ (mmol/L)", "K+ (mmol/L)"),
     "hypoxanthine": ("Hx (mmol/L)", "Hx (mmol/L)"),
-    "u_am": ("U/Am (mmol/L)", "U/Am (mmol/L)"),
-    "albumin": ("Albumina (mmol/L)", "Albumin (mmol/L)"),
+    "u_am": ("Urea (mg/dL) / ammonio (mmol/L)", "Urea (mg/dL) / ammonium (mmol/L)"),
+    "albumin": ("Albumina (g/L)", "Albumin (g/L)"),
     "exclusion_criteria": ("Criteri di esclusione", "Exclusion criteria"),
 }
 
@@ -71,7 +71,11 @@ def display_value(value, italian: bool) -> str:
             return "Non disponibile" if italian else "Unavailable"
         return "; ".join(f"{key.replace('_', ' ')}: {display_value(item, italian)}"
                          for key, item in value.items())
-    translations = {"present": "presente", "absent": "assente", "unknown": "sconosciuto"}
+    unit_labels = {"mmol_l": "mmol/L", "mg_dl": "mg/dL", "g_l": "g/L"}
+    if str(value) in unit_labels:
+        return unit_labels[str(value)]
+    translations = {"present": "presente", "absent": "assente", "unknown": "sconosciuto",
+                    "urea": "urea", "ammonium": "ammonio"}
     return translations.get(str(value), str(value)) if italian else str(value)
 
 
@@ -108,6 +112,9 @@ def result_text(result: dict, italian: bool) -> str:
         "hypothermia": ("assenza di ipotermia", "absence of hypothermia"),
         "drowning": ("assenza di affogamento", "absence of drowning"),
         "kidney_disease": ("assenza di nefropatia", "absence of kidney disease"),
+        "eye_trauma_or_disease": (
+            "assenza di traumi o patologie oculari", "absence of eye trauma or disease",
+        ),
         "agonal_period_over_6h": (
             "assenza di agonia superiore a 6 ore", "absence of an agonal period over 6 hours",
         ),
@@ -180,6 +187,10 @@ def result_text(result: dict, italian: bool) -> str:
                 continue
             if check_id == "time_gap_adjustment" and outcome == "unknown":
                 label = "time gap non fornito" if italian else "time gap not provided"
+            elif check_id.startswith("analytical_technique:"):
+                field = check_id.split(":", 1)[1]
+                name = {"potassium": "K+", "hypoxanthine": "Hx", "u_am": "U/Am"}.get(field, field)
+                label = ("tecnica di analisi " if italian else "analytical technique for ") + name
             elif check_id == "sampling_window" and method["method_id"] != "sturner_1963":
                 # Other formulas may have different sampling windows.
                 label = check["message"].strip().rstrip(".")

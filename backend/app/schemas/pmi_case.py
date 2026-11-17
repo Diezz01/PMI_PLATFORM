@@ -72,7 +72,7 @@ class TechniqueSelection(BaseModel):
 
         return self
 
-#Biochemical data express in mmol/L
+# Units depend on the analyte; None marks legacy data with unrecorded units.
 #if the data is availbale the value is mandatory
 class BiochemicalMeasurement(BaseModel):
     
@@ -84,6 +84,7 @@ class BiochemicalMeasurement(BaseModel):
 
     status: Literal["available", "unavailable"]
     value: float | None = None
+    unit: Literal["mmol_l", "mg_dl", "g_l"] | None = None
 
     @model_validator(mode="after")
     def check_availability(self) -> Self:
@@ -116,6 +117,17 @@ class BiochemicalMeasurementWithTechnique(BiochemicalMeasurement):
                 "An unavailable measurement must not have a technique"
             )
 
+        return self
+
+
+class UAmMeasurement(BiochemicalMeasurementWithTechnique):
+    analyte: Literal["urea", "ammonium"] | None = None
+
+    @model_validator(mode="after")
+    def check_unit(self) -> Self:
+        expected = {"urea": "mg_dl", "ammonium": "mmol_l"}.get(self.analyte)
+        if self.unit is not None and (expected is None or self.unit != expected):
+            raise ValueError("Urea requires mg/dL; ammonium requires mmol/L and an explicit analyte.")
         return self
 
 #represent the subject age
@@ -205,10 +217,10 @@ class PMICaseDraft(BaseModel):
     age : AgeData | None = None
     correction_factor: float | None = Field(default=None,gt=0,)
     correction_factor_context: CorrectionFactorContext | None = None
-    albumin : BiochemicalMeasurement | None = None
-    potassium :BiochemicalMeasurementWithTechnique | None = None
-    hypoxanthine : BiochemicalMeasurementWithTechnique | None = None
-    u_am : BiochemicalMeasurementWithTechnique | None = None
+    albumin: BiochemicalMeasurement | None = Field(default=None, description="Vitreous albumin in g/L; unit=g_l.")
+    potassium: BiochemicalMeasurementWithTechnique | None = Field(default=None, description="Vitreous potassium in mmol/L; unit=mmol_l.")
+    hypoxanthine: BiochemicalMeasurementWithTechnique | None = Field(default=None, description="Vitreous hypoxanthine in mmol/L; unit=mmol_l.")
+    u_am: UAmMeasurement | None = Field(default=None, description="One field: urea in mg/dL (analyte=urea, unit=mg_dl), or ammonium in mmol/L (analyte=ammonium, unit=mmol_l). Never interchange the analytes.")
     subject_area : SubjectArea | None = None
     exclusion_criteria: ExclusionCriteria = Field(default_factory=ExclusionCriteria)
     time_gap_minutes: int | None = Field(
@@ -244,6 +256,14 @@ class PMICaseDraft(BaseModel):
                 f"{', '.join(sorted(allowed))}"
             )
 
+        return measurement
+
+    @field_validator("albumin", "potassium", "hypoxanthine")
+    @classmethod
+    def validate_measurement_unit(cls, measurement, info):
+        expected = "g_l" if info.field_name == "albumin" else "mmol_l"
+        if measurement is not None and measurement.unit not in {None, expected}:
+            raise ValueError(f"Invalid unit for {info.field_name}; expected {expected}.")
         return measurement
 
 
