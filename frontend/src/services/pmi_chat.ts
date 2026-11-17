@@ -55,7 +55,7 @@ export type MethodResult = {
   pmi_at_sampling_hours: number | null
   time_gap_minutes: number | null
   pmi_display: string | null
-  time_reference: 'temperature_measurement' | 'sampling' | null
+  time_reference: 'temperature_measurement' | 'sampling' | 'time_gap_adjusted' | null
   applicability:
     | 'matched'
     | 'unmatched'

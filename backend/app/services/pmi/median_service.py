@@ -58,7 +58,7 @@ class PMIMedianService:
             ):
                 raise ValueError(f"Method '{method_id}' has an invalid PMI value")
 
-            if result.time_reference not in {"sampling","temperature_measurement"}:
+            if result.time_reference not in {"sampling", "temperature_measurement", "time_gap_adjusted"}:
                 raise ValueError(f"Method '{method_id}' has no valid time reference.")
 
             if common_time_reference is None:

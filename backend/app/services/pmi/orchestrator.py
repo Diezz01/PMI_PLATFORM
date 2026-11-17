@@ -1,4 +1,5 @@
 import logging
+import math
 from statistics import median
 from typing import Any
 
@@ -126,6 +127,47 @@ class PMIOrchestrator:
                         ],
                     )
                 )
+
+        # All methods are available here, regardless of registry order.
+        henssge = next((r for r in results if r.method_kind == "henssge"), None)
+        gap = input_data.get("time_gap_minutes")
+        sampling_hours = None
+        if (
+            henssge is not None
+            and henssge.calculation_status == "calculated"
+            and henssge.pmi_hours is not None
+            and henssge.time_reference == "temperature_measurement"
+            and not any(c.outcome == "failed" for c in henssge.checks)
+            and isinstance(gap, int) and not isinstance(gap, bool) and gap >= 0
+        ):
+            try:
+                estimate = henssge.pmi_hours + gap / 60.0
+                if math.isfinite(estimate) and estimate >= 0:
+                    sampling_hours = estimate
+            except OverflowError:
+                pass
+
+        for result in results:
+            method = registry.get_calculator(result.method_id)
+            window = getattr(method, "sampling_window", None)
+            if window is None or result.calculation_status != "calculated":
+                continue
+            lower, upper = window
+            check = PMICheckResult(
+                id="sampling_window",
+                field="time_gap_minutes",
+                outcome=("unknown" if sampling_hours is None else
+                         "passed" if lower <= sampling_hours <= upper else "failed"),
+                message=(
+                    f"The {lower:g}-{upper:g} hour sampling window cannot be checked: "
+                    "a usable Henssge estimate and an explicit time gap are required."
+                    if sampling_hours is None else
+                    f"Henssge plus time gap estimates {sampling_hours:.2f} hours "
+                    f"at sampling; the allowed window is {lower:g}-{upper:g} hours. "
+                    "This is an estimate-based compatibility check."
+                ),
+            )
+            result.checks = [c for c in result.checks if c.id != check.id] + [check]
 
         return results
 

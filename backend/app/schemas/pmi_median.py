@@ -46,7 +46,7 @@ class PMIMedianSelectionRequest(PMIMedianSelection):
 class PMIMedianResult(PMIMedianSelection):
     status: Literal["calculated", "not_calculated"]
     pmi_hours: float | None = Field(default=None, ge=0)
-    time_reference: Literal["temperature_measurement","sampling"] | None = None
+    time_reference: Literal["temperature_measurement", "sampling", "time_gap_adjusted"] | None = None
 
     @model_validator(mode="after")
     def check_result_consistency(self) -> Self:

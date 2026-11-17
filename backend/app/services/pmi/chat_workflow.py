@@ -93,11 +93,18 @@ def result_text(result: dict, italian: bool) -> str:
             "assenza di contaminazione dell'umor vitreo",
             "absence of vitreous contamination",
         ),
-        "sampling_window": ("prelievo entro 104 ore", "sampling within 104 hours"),
+        "sampling_window": (
+            "finestra stimata di prelievo entro 104 ore",
+            "estimated sampling window within 104 hours",
+        ),
         "scientific_applicability": (
             "applicabilità scientifica completa", "full scientific applicability",
         ),
         "time_gap_adjustment": ("compatibilità del time gap", "time-gap compatibility"),
+        "coe_branch": (
+            "soglia di Coe sul PMI comprensivo del time gap",
+            "Coe threshold on PMI including time gap",
+        ),
     }
     lines = ["Estimated PMI:", ""]
     methods = sorted(

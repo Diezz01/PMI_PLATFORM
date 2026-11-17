@@ -35,7 +35,7 @@ class PMIMethodResult(BaseModel):
     method_kind: Literal["henssge", "biochemical", "mock"]
     # Riferimento temporale del valore finale contenuto in pmi_hours.
     # None indica che non è ancora stato determinato.
-    time_reference: Literal["temperature_measurement","sampling"] | None = None
+    time_reference: Literal["temperature_measurement", "sampling", "time_gap_adjusted"] | None = None
 
     calculation_status: Literal[
         "calculated",

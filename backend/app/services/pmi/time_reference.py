@@ -1,3 +1,4 @@
+import math
 from app.schemas.pmi_results import PMICheckResult, PMIMethodResult
 
 
@@ -8,7 +9,7 @@ def apply_time_gap(
     result: PMIMethodResult,
     time_gap_minutes: int | None,
 ) -> PMIMethodResult:
-    """Refer a biological estimate to the temperature measurement time."""
+    """Add the supplied gap to a biological estimate once."""
 
     if result.method_kind != "biochemical":
         return result
@@ -26,7 +27,7 @@ def apply_time_gap(
                 "Time gap must be a non-negative integer in minutes."
             )
 
-    # Always use the original estimate, preventing double subtraction.
+    # Always use the original estimate, preventing double addition.
     sampling_hours = result.pmi_at_sampling_hours
 
     if sampling_hours is None:
@@ -69,9 +70,9 @@ def apply_time_gap(
         )
 
     else:
-        adjusted_hours = sampling_hours - time_gap_minutes / 60.0
+        adjusted_hours = sampling_hours + time_gap_minutes / 60.0
 
-        if adjusted_hours < 0:
+        if not math.isfinite(adjusted_hours) or adjusted_hours < 0:
             # Keep the original estimate, but do not expose a negative
             # final PMI or make this result eligible for the median.
             payload["calculation_status"] = "invalid_domain"
@@ -83,23 +84,21 @@ def apply_time_gap(
                 outcome="failed",
                 field="time_gap_minutes",
                 message=(
-                    "The time gap exceeds the estimated PMI at sampling. "
-                    "A non-negative PMI at temperature measurement "
-                    "cannot be obtained. The original estimate is retained."
+                    "Adding the time gap produced an invalid PMI. "
+                    "The original estimate is retained."
                 ),
             )
 
         else:
             payload["pmi_hours"] = adjusted_hours
-            payload["time_reference"] = "temperature_measurement"
+            payload["time_reference"] = "time_gap_adjusted"
 
             adjustment_check = PMICheckResult(
                 id=TIME_GAP_CHECK_ID,
                 outcome="passed",
                 field="time_gap_minutes",
                 message=(
-                    "The time gap was subtracted from the sampling PMI. "
-                    "The final estimate refers to temperature measurement."
+                    "The time gap was added to the original biological PMI."
                 ),
             )
 
