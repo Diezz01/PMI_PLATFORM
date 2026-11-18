@@ -20,8 +20,8 @@ def estimate_rognum_k_hours(potassium_mmol_l: float,ambient_temperature_c: float
 class RognumK1991PMICalculator(BiochemicalFormula):
     def __init__(self):
         super().__init__(
-            identifier="stephens_1987",
-            title="Stephens and Richards (1987)",
+            identifier="rognum_k_1991",
+            title="Rognum et al. (1991) — K+",
             equation=lambda values: estimate_rognum_k_hours(values["potassium"],values["ambient_temperature_c"],),
             sampling_window=(2.0, 35.0),
             measurements=(MeasurementRequirement("potassium", "mmol_l", ("potentiometer",)),),

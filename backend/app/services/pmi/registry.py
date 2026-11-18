@@ -9,6 +9,21 @@ from app.services.pmi.stephens import StephensPMICalculator
 from app.services.pmi.madea import MadeaPMICalculator
 from app.services.pmi.devenaux import DevenauxPMICalculator
 from app.services.pmi.rognum_h_1991 import RognumH1991PMICalculator
+from app.services.pmi.rognum_k_1991 import RognumK1991PMICalculator
+from app.services.pmi.gamero import GameroPMICalculator
+from app.services.pmi.madea_k_1994 import MadeaK1994PMICalculator
+from app.services.pmi.madea_h_1994 import MadeaH1994PMICalculator
+from app.services.pmi.james_k_1997 import JamesK1997PMICalculator
+from app.services.pmi.james_h_1997 import JamesH1997PMICalculator
+from app.services.pmi.munoz import MunozPMICalculator
+from app.services.pmi.zhou import ZhouPMICalculator
+from app.services.pmi.jashnani import JashnaniPMICalculator
+from app.services.pmi.bortolotti import BortolottiPMICalculator
+from app.services.pmi.salam import SalamPMICalculator
+from app.services.pmi.mihailovic import MihailovicPMICalculator
+from app.services.pmi.nermeen import NermeenPMICalculator
+from app.services.pmi.siddamsetty import SiddamsettyPMICalculator
+from app.services.pmi.tumram import TumramPMICalculator
 
 class PMICalculatorsRegistry:
     
@@ -39,3 +54,18 @@ registry.register(StephensPMICalculator())
 registry.register(MadeaPMICalculator())
 registry.register(DevenauxPMICalculator())
 registry.register(RognumH1991PMICalculator())
+registry.register(RognumK1991PMICalculator())
+registry.register(GameroPMICalculator())
+registry.register(MadeaK1994PMICalculator())
+registry.register(MadeaH1994PMICalculator())
+registry.register(JamesK1997PMICalculator())
+registry.register(JamesH1997PMICalculator())
+registry.register(MunozPMICalculator())
+registry.register(ZhouPMICalculator())
+registry.register(JashnaniPMICalculator())
+registry.register(BortolottiPMICalculator())
+registry.register(SalamPMICalculator())
+registry.register(MihailovicPMICalculator())
+registry.register(NermeenPMICalculator())
+registry.register(SiddamsettyPMICalculator())
+registry.register(TumramPMICalculator())
