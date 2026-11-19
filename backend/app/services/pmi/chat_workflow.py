@@ -192,7 +192,8 @@ def result_text(result: dict, italian: bool) -> str:
                 label = "time gap non fornito" if italian else "time gap not provided"
             elif check_id.startswith("analytical_technique:"):
                 field = check_id.split(":", 1)[1]
-                name = {"potassium": "K+", "hypoxanthine": "Hx", "u_am": "U/Am"}.get(field, field)
+                name = {"potassium": "K+", "hypoxanthine": "Hx", "u_am": "U/Am",
+                        "albumin": "albumina" if italian else "albumin"}.get(field, field)
                 label = ("tecnica di analisi " if italian else "analytical technique for ") + name
             elif check_id == "sampling_window" and method["method_id"] != "sturner_1963":
                 # Other formulas may have different sampling windows.

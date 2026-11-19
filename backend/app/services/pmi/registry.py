@@ -24,6 +24,13 @@ from app.services.pmi.mihailovic import MihailovicPMICalculator
 from app.services.pmi.nermeen import NermeenPMICalculator
 from app.services.pmi.siddamsetty import SiddamsettyPMICalculator
 from app.services.pmi.tumram import TumramPMICalculator
+from app.services.pmi.swain import SwainPMICalculator
+from app.services.pmi.rognum_k_2016 import RognumK2016PMICalculator
+from app.services.pmi.rognum_h_2016 import RognumH2016PMICalculator
+from app.services.pmi.saldana import SaldanaPMICalculator
+from app.services.pmi.palacio_k import PalacioKPMICalculator
+from app.services.pmi.palacio_am import PalacioAmPMICalculator
+from app.services.pmi.focardi import FocardiPMICalculator
 
 class PMICalculatorsRegistry:
     
@@ -69,3 +76,10 @@ registry.register(MihailovicPMICalculator())
 registry.register(NermeenPMICalculator())
 registry.register(SiddamsettyPMICalculator())
 registry.register(TumramPMICalculator())
+registry.register(SwainPMICalculator())
+registry.register(RognumK2016PMICalculator())
+registry.register(RognumH2016PMICalculator())
+registry.register(SaldanaPMICalculator())
+registry.register(PalacioKPMICalculator())
+registry.register(PalacioAmPMICalculator())
+registry.register(FocardiPMICalculator())
