@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.pmi_draft import PMIDraftResponse
 from app.schemas.pmi import PMICalculateResponse
+from app.schemas.pmi_selection import PMIResultSelection
+from app.schemas.pmi_median import PMIMedianResult
 
 
 class PMIChatRequest(BaseModel):
@@ -26,6 +28,9 @@ class PMIChatTurn(BaseModel):
     created_at: datetime
     error: str | None = None
     calculation: PMICalculateResponse | None = None
+    result_selection: PMIResultSelection | None = None
+    median_selection: PMIResultSelection | None = None
+    median_result: PMIMedianResult | None = None
 
 
 class PMIChatResponse(BaseModel):

@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.services.pmi.ollama_client import chat_with_ollama
+from app.services.pmi.result_selection import selection_question
 
 
 class ConversationIntent(BaseModel):
@@ -229,6 +230,9 @@ def advance_workflow(*, previous: dict, intent: ConversationIntent, draft: dict,
     closed = workflow.get("collection_closed", False)
     pending = workflow.get("summary_version")
     current_version = draft["version"]
+    if workflow.get("calculated_version") not in {None, current_version}:
+        workflow.pop("calculation_session_id", None)
+        workflow.pop("calculated_version", None)
     if intent.action == "finish_collection":
         closed = True
     workflow["collection_closed"] = closed
@@ -281,9 +285,10 @@ def advance_workflow(*, previous: dict, intent: ConversationIntent, draft: dict,
     if (intent.action == "confirm_calculation" and not intent.requests_changes
             and pending == current_version and workflow.get("stage") == "confirmation"):
         result, confirmed_version = calculate(current_version)
-        workflow.update(stage="calculated", calculated_version=confirmed_version)
+        workflow.update(stage="result_selection", calculated_version=confirmed_version,
+                        calculation_session_id=result["session_id"])
         workflow.pop("summary_version", None)
-        return result_text(result, italian), workflow, result
+        return result_text(result, italian) + "\n\n" + selection_question(italian), workflow, result
 
     workflow.update(stage="confirmation", summary_version=current_version)
     return summary_text(draft, italian), workflow, None

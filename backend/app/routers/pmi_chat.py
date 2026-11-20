@@ -29,6 +29,8 @@ from sqlalchemy.orm import Session
 from app.routers.pmi_drafts import confirm_draft, calculate_from_draft
 from app.schemas.pmi_draft import PMIDraftConfirmRequest, PMIDraftCalculateRequest
 from app.services.pmi.session_store import PMISessionStore, get_pmi_session_store
+from app.services.pmi.session_store import PMISessionConflict
+from app.services.pmi.result_selection import handle_result_selection
 
 
 router = APIRouter(prefix="/pmi/drafts", tags=["PMI chat"])
@@ -245,7 +247,19 @@ def send_message(
             history = _model_history(turns)
             previous_turn = next((item for item in reversed(turns)
                                   if item["status"] == "completed"), {})
-            previous_workflow = previous_turn.get("workflow", {})
+            previous_workflow = dict(previous_turn.get("workflow", {}))
+            # Reconnect existing conversations created before result selection
+            # was available, only when their calculation uses the current draft.
+            if not previous_workflow.get("calculation_session_id"):
+                previous_calculation = next((item["calculation"] for item in reversed(turns)
+                    if item["status"] == "completed" and item.get("calculation")), None)
+                source = (previous_calculation or {}).get("source_draft")
+                if (source == {"draft_id": draft_id, "version": record["input_data"]["version"]}
+                        and previous_calculation["session_id"] != previous_workflow.get("expired_calculation_session_id")):
+                    previous_workflow.update(
+                        calculation_session_id=previous_calculation["session_id"],
+                        calculated_version=source["version"],
+                    )
             pending_biology = next((item["pending_biology"] for item in reversed(turns)
                                     if "pending_biology" in item), {})
 
@@ -268,6 +282,21 @@ def send_message(
             service = PMIChatService(tools)
 
             try:
+                selection_outcome = asyncio.run(handle_result_selection(
+                    message=request.message, draft=record, workflow=previous_workflow,
+                    last_reply=previous_turn.get("assistant_message", ""),
+                    user_id=current_user.id, draft_id=draft_id,
+                    session_store=session_store, draft_store=store,
+                ))
+                if selection_outcome is not None:
+                    turn.update(status="completed", assistant_message=selection_outcome["reply"],
+                                workflow=selection_outcome["workflow"],
+                                result_selection=selection_outcome["selection"],
+                                median_selection=selection_outcome.get("median_selection"),
+                                median_result=selection_outcome.get("median_result"))
+                    _save_turns(store, current_user.id, draft_id, record, turns)
+                    current_record = store.get_session(user_id=current_user.id, session_id=draft_id)
+                    return _response(current_record, turns)
                 async def collect_biology():
                     async with asyncio.timeout(20):
                         return await extract_biology(request.message, pending_biology, record["input_data"]["data"])
@@ -345,6 +374,9 @@ def send_message(
                         for method in calculation["evaluated_results"]
                     ],
                 }
+            except PMISessionConflict:
+                turn["status"] = "failed"
+                turn["error"] = "La selezione è cambiata. Ricarica la chat e riprova. / Selection changed. Reload and retry."
             except HTTPException as exc:
                 turn["status"] = "failed"
                 turn["error"] = str(exc.detail)

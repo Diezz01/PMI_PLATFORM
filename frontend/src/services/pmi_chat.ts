@@ -27,6 +27,25 @@ export type ChatTurn = {
   status: 'processing' | 'completed' | 'failed'
   created_at: string
   error: string | null
+  result_selection?: {
+    session_id: string
+    source_draft_id: string
+    source_draft_version: number
+    status: 'empty' | 'selected' | 'awaiting_warning_confirmation'
+    selected_method_ids: string[]
+    acknowledged_warning_method_ids: string[]
+    pending_method_ids: string[]
+    pending_warning_method_ids: string[]
+  } | null
+  median_selection?: ChatTurn['result_selection']
+  median_result?: {
+    status: 'calculated' | 'not_calculated'
+    selected_method_ids: string[]
+    acknowledged_warning_method_ids: string[]
+    pmi_hours: number | null
+    pmi_display: string | null
+    time_reference: 'temperature_measurement' | 'sampling' | 'time_gap_adjusted' | null
+  } | null
 }
 
 export type ChatResponse = {

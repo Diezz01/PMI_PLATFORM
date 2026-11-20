@@ -92,9 +92,9 @@ def _persist_state(
     state: PMIDraftState,
     expected_version: int,
 ) -> dict:
-    # Redis incrementa la versione a ogni scrittura accettata.
-    # Allineiamo la versione interna anche per aggiornamenti
-    # che non modificano effettivamente i dati.
+    if state == _read_state(record):
+        return record
+    # Accepted changes advance Redis and draft versions together.
     persisted_state = state.model_copy(
         update={"version": expected_version + 1},
         deep=True,

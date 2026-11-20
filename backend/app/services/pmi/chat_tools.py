@@ -184,6 +184,11 @@ class PMIChatTools:
                 parsed_arguments,
             )
 
+            # Repeating existing values does not invalidate a calculation or
+            # its selection. Only actual draft changes advance the version.
+            if updated_state == state:
+                return self._response(record)
+
     
             updated_state = updated_state.model_copy(
                 update={

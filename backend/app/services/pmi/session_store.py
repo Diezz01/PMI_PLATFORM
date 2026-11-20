@@ -67,12 +67,12 @@ if ttl <= 0 then
     return ''
 end
 
-session.expires_at = ARGV[5]
-redis.call('SET', KEYS[1], cjson.encode(session), 'EX', ttl)
+-- Preserve the original JSON: cjson.encode turns empty arrays into objects.
+redis.call('EXPIRE', KEYS[1], ttl)
 redis.call('ZADD', KEYS[2], expires_at, ARGV[4])
 redis.call('EXPIRE', KEYS[2], tonumber(ARGV[6]))
 
-return cjson.encode(session)
+return raw
 """
 
 _UPDATE_SCRIPT = """
@@ -234,7 +234,9 @@ class PMISessionStore:
         if not raw:
             raise PMISessionNotFound
 
-        return json.loads(raw)
+        session = json.loads(raw)
+        session["expires_at"] = _utc_iso(expires_at)
+        return session
 
     def update_session(
         self,
