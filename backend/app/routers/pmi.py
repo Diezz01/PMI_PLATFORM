@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timezone
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from redis.exceptions import RedisError
 from sqlalchemy import select, func
@@ -10,6 +12,8 @@ from app.schemas.pmi_median import PMIMedianResult, PMIMedianSelection
 from app.schemas.pmi_results import PMIMethodResult
 from app.services.pmi.median_service import PMIMedianService
 from app.services.pmi.save_service import prepare_save
+from app.services.pmi.registry import registry
+from app.schemas.pmi_case import SubjectArea
 from app.database import get_db
 from app.configs.dependencies import get_current_user
 from app.models.user import User
@@ -27,7 +31,9 @@ from app.schemas.pmi import (
     PMISaveRequest,
     PMISaveResponse,
     PMIHistoryItem,
-    PMIHistoryResponse
+    PMIHistoryResponse,
+    PMIHistoryMethod,
+    PMIHistoryMethodsResponse,
 )
 from app.services.pmi.pmi_service import InvalidCorrectionFactor, PMIService
 from app.services.pmi.session_store import (
@@ -518,24 +524,49 @@ def save_pmi_session(
 def get_pmi_history(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    case_id: int | None = Query(default=None, ge=1),
+    saved_from: datetime | None = None,
+    saved_before: datetime | None = None,
+    method: str | None = Query(default=None, min_length=1, max_length=120),
+    subject_area: SubjectArea | None = None,
+    has_median: bool | None = None,
+    sort: Literal["newest", "oldest"] = "newest",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PMIHistoryResponse:
-    user_filter = PMICalculation.user_id == current_user.id
+    for bound in (saved_from, saved_before):
+        if bound is not None and bound.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Date filters must include a timezone.")
+    if saved_from and saved_before and saved_before <= saved_from:
+        raise HTTPException(status_code=422, detail="The end date must follow the start date.")
+
+    filters = [PMICalculation.user_id == current_user.id]
+    if case_id is not None:
+        filters.append(PMICalculation.id == case_id)
+    if saved_from is not None:
+        filters.append(PMICalculation.created_at >= saved_from.astimezone(timezone.utc))
+    if saved_before is not None:
+        filters.append(PMICalculation.created_at < saved_before.astimezone(timezone.utc))
+    if method is not None:
+        filters.append(PMICalculation.results.any(PMIResult.method_name == method))
+    if subject_area is not None:
+        filters.append(PMICalculation.input_data["subject_area"].as_string() == subject_area)
+    if has_median is not None:
+        filters.append(PMICalculation.median_pmi.is_not(None) if has_median else PMICalculation.median_pmi.is_(None))
 
     total = db.scalar(
         select(func.count())
         .select_from(PMICalculation)
-        .where(user_filter)
+        .where(*filters)
     ) or 0
 
     calculations = db.scalars(
         select(PMICalculation)
         .options(selectinload(PMICalculation.results))
-        .where(user_filter)
+        .where(*filters)
         .order_by(
-            PMICalculation.created_at.desc(),
-            PMICalculation.id.desc(),
+            PMICalculation.created_at.desc() if sort == "newest" else PMICalculation.created_at.asc(),
+            PMICalculation.id.desc() if sort == "newest" else PMICalculation.id.asc(),
         )
         .offset(offset)
         .limit(limit)
@@ -568,4 +599,41 @@ def get_pmi_history(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/history/methods", response_model=PMIHistoryMethodsResponse)
+def get_history_methods(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PMIHistoryMethodsResponse:
+    method_ids = db.scalars(select(PMIResult.method_name)
+        .join(PMICalculation, PMIResult.calculation_id == PMICalculation.id)
+        .where(PMICalculation.user_id == current_user.id)
+        .distinct().order_by(PMIResult.method_name)).all()
+    labels = {m.name: getattr(m, "title", None) or ("Henssge" if m.name == "henssge" else m.name)
+              for m in registry.get_all_calculators()}
+    return PMIHistoryMethodsResponse(methods=[
+        PMIHistoryMethod(method_id=m, label=labels.get(m, m)) for m in method_ids
+    ])
+
+
+@router.delete("/history/{calculation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_saved_case(
+    calculation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    calculation = db.scalar(select(PMICalculation).where(
+        PMICalculation.id == calculation_id,
+        PMICalculation.user_id == current_user.id,
+    ))
+    if calculation is None:
+        raise HTTPException(status_code=404, detail="Saved case not found.")
+    try:
+        # The relationship also deletes the saved method results.
+        db.delete(calculation)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 

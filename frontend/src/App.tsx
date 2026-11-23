@@ -77,7 +77,7 @@ function App() {
           </div>
         </div>
       </header>
-      <main className={styles.main}>
+      <main className={`${styles.main} ${session ? styles.dashboardMain : ''}`}>
         {checkingSession ? (
           <p role="status">Checking your session...</p>
         ) : sessionError ? (

@@ -12,7 +12,7 @@
 }
 
 .headerContent {
-  width: min(100% - 2rem, 72rem);
+  width: min(100% - 2rem, 76rem);
   margin-inline: auto;
   padding-block: 1.25rem;
 
@@ -79,6 +79,12 @@
 .authPanel {
   width: 100%;
   max-width: 28rem;
+}
+
+.dashboardMain {
+  display: block;
+  padding: 0;
+  min-width: 0;
 }
 
 .footer {

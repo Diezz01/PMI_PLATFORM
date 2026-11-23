@@ -151,7 +151,7 @@ function errorMessage(status: number, payload: unknown): string {
   }
 
   if (status === 404) {
-    return 'The draft was not found or has expired.'
+    return 'The requested resource was not found or has expired.'
   }
 
   if (isRecord(payload)) {
@@ -174,7 +174,7 @@ function errorMessage(status: number, payload: unknown): string {
   return `The request failed (HTTP ${status}).`
 }
 
-async function requestJson<T>(
+export async function requestJson<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {

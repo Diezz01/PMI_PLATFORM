@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getChat,
   sendChatMessage,
+  PmiApiError,
 } from '../services/pmi_chat'
 
 import type {
@@ -19,6 +20,7 @@ export function usePmiChat(draftId: string) {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [pending, setPending] = useState<ChatRequest | null>(null)
+  const [expired, setExpired] = useState(false)
 
   const operationRef = useRef(false)
   const mountedRef = useRef(false)
@@ -37,6 +39,7 @@ export function usePmiChat(draftId: string) {
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(describeError(cause))
+          if (cause instanceof PmiApiError && cause.status === 404) setExpired(true)
         }
       })
 
@@ -70,7 +73,10 @@ export function usePmiChat(draftId: string) {
         setPending(null)
       }
     } catch (cause) {
-      if (mountedRef.current) setError(describeError(cause))
+      if (mountedRef.current) {
+        setError(describeError(cause))
+        if (cause instanceof PmiApiError && cause.status === 404) setExpired(true)
+      }
     } finally {
       operationRef.current = false
       if (mountedRef.current) setWorking(false)
@@ -95,6 +101,7 @@ export function usePmiChat(draftId: string) {
     } catch (cause) {
       if (mountedRef.current) {
         setError(describeError(cause))
+        if (cause instanceof PmiApiError && cause.status === 404) setExpired(true)
         // Keep the same request ID for an explicit retry.
       }
     } finally {
@@ -140,6 +147,7 @@ export function usePmiChat(draftId: string) {
     processing,
     pending,
     error,
+    expired,
     canSend,
     send,
     reload,

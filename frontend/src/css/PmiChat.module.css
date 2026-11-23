@@ -29,6 +29,18 @@
   margin-top: 0;
 }
 
+.toolbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.summary > summary {
+  font-weight: 700;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
 .thread {
   display: flex;
   flex-direction: column;

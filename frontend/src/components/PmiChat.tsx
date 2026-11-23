@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { deleteDraft } from '../services/pmi_chat'
 
 import {
@@ -21,6 +21,8 @@ import styles from '../css/PmiChat.module.css'
 type Props = {
   draftId: string
   onDeleted: () => void
+  onExpired: () => void
+  onSaved: () => void
 }
 
 function UserMessage() {
@@ -58,15 +60,28 @@ function AssistantMessage() {
   )
 }
 
-export default function PmiChat({ draftId, onDeleted }: Props) {
+export default function PmiChat({ draftId, onDeleted, onExpired, onSaved }: Props) {
   const chat = usePmiChat(draftId)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const deletingRef = useRef(false)
+  const savedIdRef = useRef<number | null>(null)
+  const savedId = chat.snapshot?.turns.findLast((turn) => turn.saved_calculation)?.saved_calculation?.calculation_id
 
-  async function removeChat() {
-    if (deletingRef.current || chat.working || chat.processing) return
-    if (!window.confirm('Delete this conversation and its draft? This cannot be undone.')) return
+  useEffect(() => { if (chat.expired) onExpired() }, [chat.expired, onExpired])
+  useEffect(() => {
+    if (savedId != null && savedIdRef.current !== savedId) {
+      savedIdRef.current = savedId
+      onSaved()
+    }
+  }, [savedId, onSaved])
+
+  async function removeChat(newCase = false) {
+    if (deletingRef.current || chat.working || chat.processing || chat.pending) return
+    const message = newCase
+      ? 'Start a new case? This conversation and its unsaved draft will be deleted. Results already saved to the database will remain available.'
+      : 'Delete this conversation and its draft? Results already saved to the database will remain available.'
+    if (!window.confirm(message)) return
     deletingRef.current = true
     setDeleting(true)
     setDeleteError('')
@@ -147,20 +162,23 @@ export default function PmiChat({ draftId, onDeleted }: Props) {
       <section className={styles.chatPanel} aria-label="PMI conversation">
         <div className={styles.toolbar}>
           <h1>PMI assistant</h1>
-          {/*<button
+          <div className={styles.toolbarActions}>
+          <button type="button" onClick={() => void removeChat(true)} disabled={deleting || chat.working || chat.processing || chat.pending !== null}>New case</button>
+          <button
             type="button"
             onClick={() => void chat.reload()}
             disabled={chat.working || deleting}
           >
             Refresh
-          </button>*/}
+          </button>
           <button
             type="button"
             onClick={() => void removeChat()}
-            disabled={deleting || chat.working || chat.processing}
+            disabled={deleting || chat.working || chat.processing || chat.pending !== null}
           >
             {deleting ? 'Deleting...' : 'Delete chat'}
           </button>
+          </div>
         </div>
 
         {deleteError && <p className={styles.error} role="alert">{deleteError}</p>}
@@ -241,8 +259,8 @@ export default function PmiChat({ draftId, onDeleted }: Props) {
         </AssistantRuntimeProvider>
       </section>
 
-      <aside className={styles.summary} aria-label="Case summary">
-        <h2>Case summary</h2>
+      <details className={styles.summary} aria-label="Case summary" open>
+        <summary>Case summary</summary>
         <p>Values currently stored by the backend.</p>
 
         <dl>
@@ -270,7 +288,7 @@ export default function PmiChat({ draftId, onDeleted }: Props) {
           This panel shows the four required parameters. Review the complete
           summary in the chat, then confirm there to calculate PMI.
         </p>
-      </aside>
+      </details>
     </div>
   )
 }

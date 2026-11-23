@@ -117,3 +117,12 @@ class PMIHistoryResponse(BaseModel):
     limit: int
     offset: int
 
+
+class PMIHistoryMethod(BaseModel):
+    method_id: str
+    label: str
+
+
+class PMIHistoryMethodsResponse(BaseModel):
+    methods: list[PMIHistoryMethod]
+
