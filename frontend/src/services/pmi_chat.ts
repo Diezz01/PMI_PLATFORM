@@ -46,6 +46,20 @@ export type ChatTurn = {
     pmi_display: string | null
     time_reference: 'temperature_measurement' | 'sampling' | 'time_gap_adjusted' | null
   } | null
+  saved_calculation?: {
+    calculation_id: number
+    session_id: string
+    saved_results: {
+      method_name: string
+      pmi_value: string
+      input_params: Record<string, unknown>
+      method_version: string
+    }[]
+    median_selected_methods: string[]
+    median_pmi: string | null
+    evaluation_snapshot: Record<string, unknown> | null
+    created_at: string
+  } | null
 }
 
 export type ChatResponse = {

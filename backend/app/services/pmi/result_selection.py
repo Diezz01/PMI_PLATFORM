@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.pmi_median import PMIMedianSelection
+from app.schemas.pmi import PMISaveRequest
 from app.schemas.pmi_results import PMIMethodResult
 from app.schemas.pmi_selection import PMIResultSelection
 from app.services.pmi.ollama_client import chat_with_ollama
@@ -17,6 +18,7 @@ from app.services.pmi.median_service import PMIMedianService
 from app.services.pmi.median_dialogue import (
     _median_updates, handle_median_intent, median_candidates, median_offer, median_question,
 )
+from app.services.pmi.save_dialogue import saved_outcome, save_question, interpret_save_reply
 
 
 def selection_question(italian: bool) -> str:
@@ -50,7 +52,7 @@ class SelectionIntent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["replace", "add", "remove", "all", "compatible", "clear", "show", "clarify",
                     "accept_warnings", "reject_warnings", "update_case", "other",
-                    "start_median", "skip_median"]
+                    "start_median", "skip_median", "save_results", "save_without_median", "decline_save"]
     target: Literal["keep", "median"]
     method_ids: list[str] = Field(description="Exact IDs explicitly included by the latest message. Exclusions belong only in excluded_method_ids.")
     excluded_method_ids: list[str] = Field(default_factory=list,
@@ -271,7 +273,7 @@ def _ground_selection_intent(intent, message, results):
     return intent
 
 
-async def interpret_selection(message, selection, results, last_reply, *, median_selection=None, phase="keep", selection_only=False):
+async def interpret_selection(message, selection, results, last_reply, *, median_selection=None, phase="keep", selection_only=False, stage=None):
     schema = _inline_schema_refs(SelectionIntent.model_json_schema())
     schema["required"] = list(dict.fromkeys([
         *schema.get("required", []), "excluded_method_ids", "selection_base",
@@ -340,14 +342,22 @@ async def interpret_selection(message, selection, results, last_reply, *, median
             "Example: 'I want to keep Hennsge, sturner, coe and Gamero et al. (1992)' "
             "means replace, target=keep, IDs henssge/hennsge as listed in the catalogue, "
             "sturner_1963, coe_1969 and gamero_1992; it never means update_case. "
-            "For requests to save to the database use other; saving is not implemented yet. "
-            "Do not claim database saving or perform a calculation. "
+            "save_results requests permanent database saving of the already confirmed keep "
+            "selection and the current optional median. save_without_median explicitly requests "
+            "saving without a median, even if a median was calculated or is pending. "
+            "These actions have target=keep, empty method lists, selection_base=current. "
+            "A request to change named methods before saving must first change the selection; "
+            "do not combine an unconfirmed selection edit with saving. "
+            "When stage=awaiting_save, yes means save_results and no means decline_save. "
+            "This is a different question from offering a median or acknowledging warnings. "
+            "A question about how saving works is other, never consent to save. "
+            "Do not claim database saving or perform a calculation yourself. "
             "For mutations evidence must be an exact nonempty substring of the latest user "
             "message that requests the action. For other/show/clarify/update_case it may be empty.\n"
             + ("\nSELECTION-ONLY REVIEW: Case-data changes have NOT been established. "
                "Resolve the user's result/median request or ask clarification. Never update case data.\n"
                if selection_only else "")
-            + json.dumps({"phase": phase, "keep_selection": selection.model_dump(),
+            + json.dumps({"phase": phase, "stage": stage, "keep_selection": selection.model_dump(),
                           "median_selection": median_selection.model_dump() if median_selection else None,
                           "median_options": [r.method_id for r in median_candidates(results, selection)],
                           "catalogue": [
@@ -417,10 +427,6 @@ def apply_selection_intent(selection, intent, results, *, purpose="keep"):
         if selection.status == "awaiting_warning_confirmation":
             return selection, _warning_prompt(selection, by_id, italian, purpose), False
         reply = _summary(selection, by_id, italian, purpose)
-        if intent.action == "other":
-            reply += ("\nIl salvataggio definitivo verrà collegato "
-                      "nei prossimi passaggi." if italian else
-                      "\nFinal saving will be connected in the next steps.")
         question = selection_question(italian) if purpose == "keep" else (
             "Quali formule vuoi includere nella mediana? Henssge è escluso. Puoi anche rinunciare."
             if italian else "Which formulas should be included in the median? Henssge is excluded. You may also skip it.")
@@ -474,7 +480,7 @@ def apply_selection_intent(selection, intent, results, *, purpose="keep"):
 
 
 async def handle_result_selection(*, message, draft, workflow, last_reply, user_id,
-                                  draft_id, session_store, draft_store):
+                                  draft_id, session_store, draft_store, save=None):
     """Return None when ordinary case-data collection should handle the message."""
     session_id = workflow.get("calculation_session_id")
     if not session_id or workflow.get("calculated_version") != draft["input_data"]["version"]:
@@ -511,7 +517,7 @@ async def handle_result_selection(*, message, draft, workflow, last_reply, user_
         session = {**session, **reset_updates}
         workflow = {**workflow, "stage": "median_selection"}
     phase = "median" if workflow.get("stage") in {
-        "median_offer", "median_selection", "median_ready", "ready_to_save", "results_selected",
+        "median_offer", "median_selection", "median_ready", "ready_to_save", "results_selected", "awaiting_save",
     } else "keep"
     if selection.status == "awaiting_warning_confirmation":
         phase = "keep"
@@ -521,6 +527,25 @@ async def handle_result_selection(*, message, draft, workflow, last_reply, user_
                              for pattern in _CASE_FIELD_WORDS.values())
     intent = _pending_warning_intent(message, selection, median_selection, phase, last_reply)
     pending = selection if phase == "keep" else median_selection
+    save_reviewed = False
+    save_change = False
+    if intent is None and workflow.get("stage") == "awaiting_save" and pending.status != "awaiting_warning_confirmation":
+        answer = _normalized(message)
+        action = ("save_results" if answer in {"yes", "yes please", "si", "ok", "okay", "confermo"}
+                  else "decline_save" if answer in {"no", "no grazie", "no thanks"} else None)
+        if action:
+            intent = SelectionIntent(action=action, target="keep", method_ids=[], unresolved_names=[],
+                evidence=message, language=workflow.get("language", "en"))
+            save_reviewed = True
+        else:
+            async with asyncio.timeout(30):
+                save_reply = await interpret_save_reply(message, offered=True)
+            save_reviewed = True
+            if save_reply.action:
+                intent = SelectionIntent(action=save_reply.action, target="keep",
+                    method_ids=[], unresolved_names=[], evidence=save_reply.evidence, language=save_reply.language)
+            else:
+                save_change = True
     warning_change = False
     if intent is None and pending.status == "awaiting_warning_confirmation":
         async with asyncio.timeout(30):
@@ -530,11 +555,7 @@ async def handle_result_selection(*, message, draft, workflow, last_reply, user_
         async with asyncio.timeout(30):
             intent = await interpret_selection(message, selection, results, last_reply,
                                                median_selection=median_selection, phase=phase,
-                                               selection_only=selection_only)
-    if warning_change and intent.action in {"accept_warnings", "reject_warnings"}:
-        # A changed/conditional proposal cannot acknowledge the original one.
-        intent.action = "clarify"
-        intent.target = phase
+                                               selection_only=selection_only, stage=workflow.get("stage"))
     if intent.action == "update_case":
         if _has_concrete_case_edit(message, intent.case_edits):
             return None
@@ -542,14 +563,54 @@ async def handle_result_selection(*, message, draft, workflow, last_reply, user_
         # to the draft updater. Retry only within the selection vocabulary.
         async with asyncio.timeout(30):
             intent = await interpret_selection(message, selection, results, last_reply,
-                median_selection=median_selection, phase=phase, selection_only=True)
+                median_selection=median_selection, phase=phase, selection_only=True, stage=workflow.get("stage"))
         if intent.action == "update_case":
             intent.action = "show"
+    if warning_change and intent.action in {"accept_warnings", "reject_warnings"}:
+        # A changed/conditional proposal cannot acknowledge the original one.
+        intent.action = "clarify"
+        intent.target = phase
+    if save_change and intent.action in {"save_results", "save_without_median", "decline_save"}:
+        intent.action = "clarify"
+    if intent.action in {"save_results", "save_without_median", "decline_save"} and not save_reviewed:
+        async with asyncio.timeout(30):
+            save_reply = await interpret_save_reply(message, offered=False)
+        intent.action = save_reply.action or "clarify"
+        intent.method_ids = []
+        intent.excluded_method_ids = []
+        intent.unresolved_names = []
+        intent.evidence = save_reply.evidence
+        intent.language = save_reply.language
     if intent.action not in {"other", "show", "clarify"} and (
             not _normalized(intent.evidence) or _normalized(intent.evidence) not in _normalized(message)):
         intent.action = "clarify"
     if intent.action in {"start_median", "skip_median"}:
         intent.target = "median"
+    if intent.action in {"save_results", "save_without_median", "decline_save"}:
+        reply = None
+        if intent.action == "decline_save":
+            reply = ("Va bene. I risultati non sono stati salvati nel database. Puoi modificarli o chiedermi di salvarli."
+                     if intent.language == "it" else
+                     "OK. The results have not been saved to the database. You can change them or ask me to save them.")
+        elif selection.status != "selected":
+            reply = (_warning_prompt(selection, {r.method_id: r for r in results}, intent.language == "it")
+                     if selection.status == "awaiting_warning_confirmation" else selection_question(intent.language == "it"))
+        else:
+            current = draft_store.get_session(user_id=user_id, session_id=draft_id)
+            if current["input_data"]["version"] != source["version"] or current["input_data"]["status"] != "confirmed":
+                raise ValueError("Case data changed. Confirm and recalculate before saving.")
+            if save is None:
+                raise RuntimeError("The permanent save operation has not been configured.")
+            try:
+                saved = save(session_id, PMISaveRequest(selected_methods=selection.selected_method_ids,
+                    expected_version=session["version"], omit_median=intent.action == "save_without_median"))
+            except ValueError as exc:
+                reply = ("Salvataggio non eseguito: " if intent.language == "it" else "Results not saved: ") + str(exc)
+            else:
+                return saved_outcome(saved, workflow, intent.language == "it")
+        return {"reply": reply, "workflow": {**workflow, "stage": "results_selected"} if intent.action == "decline_save" else workflow,
+                "selection": selection.model_dump(), "median_selection": median_selection.model_dump(),
+                "median_result": session.get("median_result")}
     median = reset_median
     if intent.target == "median":
         reply, next_workflow, median_selection, median, updates = handle_median_intent(
@@ -582,6 +643,10 @@ async def handle_result_selection(*, message, draft, workflow, last_reply, user_
                 reply += "\n\n" + median_offer(intent.language == "it")
             elif decision == "requested":
                 reply += "\n\n" + median_question(median_candidates(results, updated), intent.language == "it")
+    if (updated.status == "selected" and next_workflow.get("stage") in {"ready_to_save", "median_ready"}
+            and median_selection.status != "awaiting_warning_confirmation"):
+        reply += "\n\n" + save_question(intent.language == "it")
+        next_workflow.update(stage="awaiting_save", language=intent.language)
     current = draft_store.get_session(user_id=user_id, session_id=draft_id)
     if current["input_data"]["version"] != source["version"] or current["input_data"]["status"] != "confirmed":
         return {"reply": "I dati sono cambiati: conferma e ricalcola prima di selezionare. / Case data changed: confirm and recalculate before selecting.",

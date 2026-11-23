@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.schemas.pmi_median import PMIMedianResult, PMIMedianSelection
 from app.schemas.pmi_results import PMIMethodResult
 from app.services.pmi.median_service import PMIMedianService
+from app.services.pmi.save_service import prepare_save
 from app.database import get_db
 from app.configs.dependencies import get_current_user
 from app.models.user import User
@@ -398,6 +399,13 @@ def _build_save_response(
     )
 
 
+def _check_saved_request(calculation: PMICalculation, request: PMISaveRequest) -> None:
+    if (set(request.selected_methods) != {r.method_name for r in calculation.results}
+            or (request.omit_median and calculation.median_pmi is not None)):
+        raise HTTPException(status_code=409,
+            detail="This calculation was already saved with different choices. Start a new case to change it.")
+
+
 @router.post(
     "/sessions/{session_id}/save",
     response_model=PMISaveResponse,
@@ -418,6 +426,7 @@ def save_pmi_session(
         session_id=session_id,
     )
     if existing:
+        _check_saved_request(existing, request)
         response.status_code = status.HTTP_200_OK
         return _build_save_response(existing, session_id=session_id)
 
@@ -439,62 +448,20 @@ def save_pmi_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="This PMI session is not available for saving",
         )
-
-    results_by_method = {
-        result["method_name"]: result
-        for result in session["results"]
-    }
-    unknown_methods = set(request.selected_methods) - set(results_by_method)
-
-    if unknown_methods:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="One or more selected methods are not available in this session",
-        )
-
-    saved_results = [
-        results_by_method[method_name]
-        for method_name in request.selected_methods
-    ]
-    median_pmi = session.get("median_pmi")
-
-    median_selected_methods = (
-        list(session.get("selected_median_methods", []))
-        if median_pmi is not None
-        else []
-    )
-
-    # La selezione per il salvataggio e quella per la mediana
-    # rimangono indipendenti. Conserviamo i dettagli di entrambe.
-    snapshot_method_ids = (
-        set(request.selected_methods)
-        | set(median_selected_methods)
-    )
-
-    stored_evaluated_results = session.get("evaluated_results")
-    evaluation_snapshot = None
-
-    if stored_evaluated_results is not None:
-        evaluation_snapshot = {
-            "schema_version": 1,
-            "session_version": session["version"],
-            "saved_method_ids": list(request.selected_methods),
-            "source_draft": session.get("source_draft"),
-            "evaluated_results": [
-                result
-                for result in stored_evaluated_results
-                if result["method_id"] in snapshot_method_ids
-            ],
-            "median_result": session.get("median_result"),
-        }
+    if request.expected_version is not None and session["version"] != request.expected_version:
+        raise HTTPException(status_code=409, detail="The calculation changed. Reload it before saving.")
+    try:
+        prepared = prepare_save(session, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
     calculation = PMICalculation(
         user_id=current_user.id,
         session_id=session_id,
         input_data=session["input_data"],
-        median_pmi=median_pmi,
-        median_selected_methods=median_selected_methods,
-        evaluation_snapshot=evaluation_snapshot,
+        median_pmi=prepared["median_pmi"],
+        median_selected_methods=prepared["median_selected_methods"],
+        evaluation_snapshot=prepared["evaluation_snapshot"],
         results=[
             PMIResult(
                 method_name=result["method_name"],
@@ -502,7 +469,7 @@ def save_pmi_session(
                 parameters=result["input_params"],
                 method_version=result["method_version"],
             )
-            for result in saved_results
+            for result in prepared["rows"]
         ],
     )
 
@@ -519,6 +486,7 @@ def save_pmi_session(
             session_id=session_id,
         )
         if existing:
+            _check_saved_request(existing, request)
             response.status_code = status.HTTP_200_OK
             return _build_save_response(existing, session_id=session_id)
 

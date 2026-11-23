@@ -6,7 +6,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from redis.exceptions import RedisError
 
 from app.configs.dependencies import get_current_user
@@ -31,6 +31,8 @@ from app.schemas.pmi_draft import PMIDraftConfirmRequest, PMIDraftCalculateReque
 from app.services.pmi.session_store import PMISessionStore, get_pmi_session_store
 from app.services.pmi.session_store import PMISessionConflict
 from app.services.pmi.result_selection import handle_result_selection
+from app.routers.pmi import save_pmi_session, _find_saved_calculation, _build_save_response
+from app.services.pmi.save_dialogue import saved_outcome
 
 
 router = APIRouter(prefix="/pmi/drafts", tags=["PMI chat"])
@@ -282,18 +284,39 @@ def send_message(
             service = PMIChatService(tools)
 
             try:
-                selection_outcome = asyncio.run(handle_result_selection(
-                    message=request.message, draft=record, workflow=previous_workflow,
-                    last_reply=previous_turn.get("assistant_message", ""),
-                    user_id=current_user.id, draft_id=draft_id,
-                    session_store=session_store, draft_store=store,
-                ))
+                def persist_results(session_id, save_request):
+                    try:
+                        return save_pmi_session(session_id=session_id, request=save_request,
+                            response=Response(), current_user=current_user, session_store=session_store, db=db)
+                    except HTTPException as exc:
+                        if exc.status_code in {404, 409, 422}:
+                            raise ValueError(str(exc.detail)) from None
+                        raise
+
+                # The database is authoritative after commit, including a retry
+                # after Redis cleanup or a lost chat response.
+                saved = None
+                calculation_id = previous_workflow.get("calculation_session_id")
+                if calculation_id and previous_workflow.get("calculated_version") == record["input_data"]["version"]:
+                    saved = _find_saved_calculation(db, user_id=current_user.id, session_id=calculation_id)
+                if saved is not None and (saved.evaluation_snapshot or {}).get("source_draft") == {
+                        "draft_id": draft_id, "version": record["input_data"]["version"]}:
+                    selection_outcome = saved_outcome(_build_save_response(saved, session_id=calculation_id),
+                        previous_workflow, previous_workflow.get("language") == "it")
+                else:
+                    selection_outcome = asyncio.run(handle_result_selection(
+                        message=request.message, draft=record, workflow=previous_workflow,
+                        last_reply=previous_turn.get("assistant_message", ""),
+                        user_id=current_user.id, draft_id=draft_id,
+                        session_store=session_store, draft_store=store, save=persist_results,
+                    ))
                 if selection_outcome is not None:
                     turn.update(status="completed", assistant_message=selection_outcome["reply"],
                                 workflow=selection_outcome["workflow"],
                                 result_selection=selection_outcome["selection"],
                                 median_selection=selection_outcome.get("median_selection"),
-                                median_result=selection_outcome.get("median_result"))
+                                median_result=selection_outcome.get("median_result"),
+                                saved_calculation=selection_outcome.get("saved_calculation"))
                     _save_turns(store, current_user.id, draft_id, record, turns)
                     current_record = store.get_session(user_id=current_user.id, session_id=draft_id)
                     return _response(current_record, turns)

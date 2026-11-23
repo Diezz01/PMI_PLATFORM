@@ -107,9 +107,6 @@ def handle_median_intent(*, intent, keep_selection, selection, results, session,
         if (median is not None and intent.action in {"show", "other"}
                 and (median.status == "calculated" or session.get("median_decision") == "skipped")):
             reply = _median_reply(median, results, italian)
-            if intent.action == "other":
-                reply += ("\nIl salvataggio definitivo sarà collegato nel prossimo passaggio." if italian
-                          else "\nFinal saving will be connected in the next step.")
         elif (updated.status != "awaiting_warning_confirmation"
               and intent.action in {"show", "replace", "add", "remove"} and not intent.method_ids
               and not intent.unresolved_names):

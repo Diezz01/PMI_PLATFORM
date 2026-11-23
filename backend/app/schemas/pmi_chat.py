@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.pmi_draft import PMIDraftResponse
-from app.schemas.pmi import PMICalculateResponse
+from app.schemas.pmi import PMICalculateResponse, PMISaveResponse
 from app.schemas.pmi_selection import PMIResultSelection
 from app.schemas.pmi_median import PMIMedianResult
 
@@ -31,6 +31,7 @@ class PMIChatTurn(BaseModel):
     result_selection: PMIResultSelection | None = None
     median_selection: PMIResultSelection | None = None
     median_result: PMIMedianResult | None = None
+    saved_calculation: PMISaveResponse | None = None
 
 
 class PMIChatResponse(BaseModel):

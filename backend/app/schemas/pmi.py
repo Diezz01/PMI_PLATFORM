@@ -81,6 +81,8 @@ class PMIMedianResponse(BaseModel):
 
 class PMISaveRequest(BaseModel):
     selected_methods: list[str] = Field(min_length=1)
+    expected_version: int | None = Field(default=None, ge=1)
+    omit_median: bool = False
 
     @field_validator("selected_methods")
     @classmethod
